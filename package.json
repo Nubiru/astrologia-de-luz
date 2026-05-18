@@ -1,0 +1,54 @@
+{
+  "name": "astrologia-de-luz",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Astrologia de Luz — brand + session-booking site for the astrologer Augusto Rocha. Spanish-only v1.0.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "postbuild": "npm run db:migrate",
+    "start": "next start",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "qa": "npm run lint && npm run typecheck && npm run test && next build",
+    "qa:fast": "npm run lint && npm run typecheck && npm run test"
+  },
+  "dependencies": {
+    "@auth/drizzle-adapter": "^1.7.0",
+    "@libsql/client": "^0.14.0",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "drizzle-orm": "^0.36.0",
+    "next": "^16.0.0",
+    "next-auth": "^5.0.0-beta.31",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "resend": "^4.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@playwright/test": "^1.49.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "drizzle-kit": "^0.30.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vite-tsconfig-paths": "^5.1.0",
+    "vitest": "^2.1.0"
+  }
+}
