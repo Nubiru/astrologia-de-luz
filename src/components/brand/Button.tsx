@@ -37,7 +37,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 };
 
 const BASE_CLASSES =
-  'inline-flex items-center justify-center font-display uppercase tracking-[0.2em] no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dorado-imperial disabled:opacity-50 disabled:cursor-not-allowed';
+  'inline-flex items-center justify-center font-display uppercase tracking-display-md no-underline transition-colors duration-micro ease-elegant focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dorado-imperial disabled:opacity-50 disabled:cursor-not-allowed';
 
 function buildClassName(variant: ButtonVariant, size: ButtonSize, extra: string) {
   return `${BASE_CLASSES} ${SIZE_CLASSES[size]} ${VARIANT_CLASSES[variant]} ${extra}`.trim();

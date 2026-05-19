@@ -44,7 +44,7 @@ export function PickerStep({ stepNumber, maestros }: PickerStepProps) {
     >
       <p
         data-brand="step-eyebrow"
-        className="font-display uppercase tracking-[0.3em] text-xs text-tinta-suave"
+        className="font-display uppercase tracking-display-lg text-xs text-tinta-suave"
       >
         Paso {stepNumber} · {stepLabels.maestro}
       </p>
@@ -99,7 +99,7 @@ export function PickerStep({ stepNumber, maestros }: PickerStepProps) {
                 <span
                   id={`${cardId}-name`}
                   data-brand="maestro-name"
-                  className="font-display uppercase tracking-[0.2em] text-sm"
+                  className="font-display uppercase tracking-display-md text-sm"
                 >
                   {m.name}
                 </span>
@@ -114,7 +114,7 @@ export function PickerStep({ stepNumber, maestros }: PickerStepProps) {
 
                 <span
                   data-brand="maestro-choose"
-                  className="mt-auto font-display uppercase tracking-[0.3em] text-xs text-dorado-imperial group-hover:text-tinta-nocturna"
+                  className="mt-auto font-display uppercase tracking-display-lg text-xs text-dorado-imperial group-hover:text-tinta-nocturna"
                 >
                   {pickerChooseLabel}
                 </span>

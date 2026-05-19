@@ -2,7 +2,11 @@ import type { Metadata } from 'next';
 
 import { Footer } from '@/components/brand/Footer';
 import { SectionWrapper } from '@/components/brand/SectionWrapper';
+import { DayStrip, DayStripProvider } from '@/components/reservar/DayStrip';
+import { Form } from '@/components/reservar/Form';
 import { PickerStep, type PickerStepMaestro } from '@/components/reservar/PickerStep';
+import { ReservarTestimonios } from '@/components/reservar/ReservarTestimonios';
+import { SlotGrid } from '@/components/reservar/SlotGrid';
 import { CONTENT_PUBLIC } from '@/infrastructure/content/public';
 import { getDb } from '@/infrastructure/db/client';
 import { teachers } from '@/infrastructure/db/schema';
@@ -81,7 +85,7 @@ export default async function ReservarPage() {
       >
         <p
           data-brand="reservar-eyebrow"
-          className="font-display uppercase tracking-[0.5em] text-xs text-dorado-imperial"
+          className="font-display uppercase tracking-display-hero text-xs text-dorado-imperial"
         >
           ASTROLOGIA DE LUZ
         </p>
@@ -109,48 +113,26 @@ export default async function ReservarPage() {
           <PickerStep stepNumber={stepNumberFor('picker')} maestros={maestros} />
         ) : null}
 
-        <section data-step="dia" data-step-number={stepNumberFor('dia')} className="w-full">
-          <p
-            data-brand="step-eyebrow"
-            className="font-display uppercase tracking-[0.3em] text-xs text-tinta-suave"
-          >
-            Paso {stepNumberFor('dia')} · {RESERVAR.stepLabels.dia}
-          </p>
-          <h2 className="mt-2 font-editorial italic text-2xl sm:text-3xl text-tinta-nocturna">
-            {RESERVAR.stepLabels.dia}
-          </h2>
-          <p className="mt-4 font-body text-sm text-tinta-suave">{RESERVAR.stepPlaceholders.dia}</p>
-        </section>
-
-        <section data-step="horario" data-step-number={stepNumberFor('horario')} className="w-full">
-          <p
-            data-brand="step-eyebrow"
-            className="font-display uppercase tracking-[0.3em] text-xs text-tinta-suave"
-          >
-            Paso {stepNumberFor('horario')} · {RESERVAR.stepLabels.horario}
-          </p>
-          <h2 className="mt-2 font-editorial italic text-2xl sm:text-3xl text-tinta-nocturna">
-            {RESERVAR.stepLabels.horario}
-          </h2>
-          <p className="mt-4 font-body text-sm text-tinta-suave">
-            {RESERVAR.stepPlaceholders.horario}
-          </p>
-        </section>
-
-        <section data-step="form" data-step-number={stepNumberFor('form')} className="w-full">
-          <p
-            data-brand="step-eyebrow"
-            className="font-display uppercase tracking-[0.3em] text-xs text-tinta-suave"
-          >
-            Paso {stepNumberFor('form')} · {RESERVAR.stepLabels.form}
-          </p>
-          <h2 className="mt-2 font-editorial italic text-2xl sm:text-3xl text-tinta-nocturna">
-            {RESERVAR.stepLabels.form}
-          </h2>
-          <p className="mt-4 font-body text-sm text-tinta-suave">
-            {RESERVAR.stepPlaceholders.form}
-          </p>
-        </section>
+        {/*
+          DayStripProvider owns the visitor TZ detection + availability fetch
+          + 60s/on-focus auto-refresh + selected-day state. It wraps both
+          step sections so DayStrip + SlotGrid share state via context.
+          In multi-maestro mode the picker click that hydrates `maestroSlug`
+          will land with the picker-interactive follow-up; for the v1.0
+          single-maestro seed the slug is passed in directly.
+        */}
+        <DayStripProvider
+          maestroSlug={single?.slug ?? null}
+          maestroName={single?.name ?? null}
+          maestroTimezone={single?.timezone ?? null}
+        >
+          <DayStrip stepNumber={stepNumberFor('dia')} />
+          <SlotGrid stepNumber={stepNumberFor('horario')} />
+          {/* AC-1.2.11 — testimonios sit between step 3 (slot grid) and step 4
+              (form). Hidden when the testimonios slot is empty. */}
+          <ReservarTestimonios />
+          <Form stepNumber={stepNumberFor('form')} />
+        </DayStripProvider>
       </SectionWrapper>
 
       <Footer />

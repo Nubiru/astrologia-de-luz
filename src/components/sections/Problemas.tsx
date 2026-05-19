@@ -1,5 +1,6 @@
 import { CONTENT_PUBLIC } from '@/infrastructure/content/public';
 import { Button } from '../brand/Button';
+import { SectionReveal } from '../brand/SectionReveal';
 import { SectionWrapper } from '../brand/SectionWrapper';
 
 const PROBLEMAS_H2_ID = 'problemas-h2';
@@ -14,12 +15,14 @@ export function Problemas() {
       ariaLabelledby={PROBLEMAS_H2_ID}
       innerClassName="flex flex-col items-center text-center gap-10 sm:gap-14"
     >
-      <h2
-        id={PROBLEMAS_H2_ID}
-        className="font-editorial italic text-3xl sm:text-4xl md:text-5xl leading-tight text-tinta-nocturna max-w-3xl"
-      >
-        {heading}
-      </h2>
+      <SectionReveal>
+        <h2
+          id={PROBLEMAS_H2_ID}
+          className="font-editorial italic text-3xl sm:text-4xl md:text-5xl leading-tight text-tinta-nocturna max-w-3xl"
+        >
+          {heading}
+        </h2>
+      </SectionReveal>
 
       <ul
         data-brand="problemas-grid"

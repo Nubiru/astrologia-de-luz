@@ -13,6 +13,61 @@
   --font-display: var(--font-cinzel), Georgia, "Times New Roman", serif;
   --font-editorial: var(--font-cormorant), Georgia, "Times New Roman", serif;
   --font-body: var(--font-jost), system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Motion — brand-manual §08 "Lento, deliberado y elegante". G_A-11 / S-4 AC-G_A-11.1. */
+  --duration-base: 800ms;
+  --duration-micro: 400ms;
+  --ease-elegant: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --reveal-translate: 20px;
+  --reveal-duration: var(--duration-base);
+
+  /* Spacing anchors — brand-manual §08 7-step scale (4/8/16/24/40/64/100px). */
+  --spacing-xs: 0.25rem;
+  --spacing-s: 0.5rem;
+  --spacing-m: 1rem;
+  --spacing-l: 1.5rem;
+  --spacing-xl: 2.5rem;
+  --spacing-2xl: 4rem;
+  --spacing-3xl: 6.25rem;
+
+  /* Tracking — brand-manual §03 Cinzel +4 to +8px band → 3 canonical anchors. */
+  --tracking-display-md: 0.2em;
+  --tracking-display-lg: 0.3em;
+  --tracking-display-hero: 0.5em;
+
+  /* Photographic treatment — brand-manual §07 CSS-layer composition. */
+  --photo-overlay-gold: rgba(201, 169, 110, 0.18);
+  --photo-grain-opacity: 0.07;
+  --photo-vignette: inset 0 0 80px 20px rgba(26, 26, 34, 0.35);
+}
+
+/* Scroll-driven fade-up reveal — brand-manual §08 ↑20px FADE-UP. The keyframes
+   block cannot live inside @theme (Tailwind 4 only hosts custom property tokens
+   inside @theme); the selector below references the @theme motion tokens. */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(var(--reveal-translate));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-reveal="fade-up"] {
+  animation: fade-up var(--reveal-duration) var(--ease-elegant) both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 50%;
+}
+
+/* Firefox parity fallback per D-064 stable-tech constraint. Firefox lacks
+   `animation-timeline: view()` support — render the end-state instantly
+   instead of animating. No JS shim. */
+@supports not (animation-timeline: view()) {
+  [data-reveal="fade-up"] {
+    animation-duration: 1ms;
+  }
 }
 
 :root {
@@ -20,6 +75,27 @@
   background-color: var(--color-blanco-estelar);
   color: var(--color-tinta-nocturna);
   font-family: var(--font-body);
+}
+
+/* Editorial drop-cap — brand-manual §03 Cormorant editorial italic. The first
+   character of a `.drop-cap` paragraph is enlarged + floated + tinted dorado
+   so the opening of the Sobre bio reads as a classic editorial column. */
+.drop-cap::first-letter {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 3.5em;
+  color: var(--color-dorado-imperial);
+  float: left;
+  line-height: 0.85;
+  margin-right: 0.1em;
+}
+
+/* Hanging quote — brand-manual §03 + §06 editorial polish. Pulls the
+   decorative opening quote-mark outside the text flow so the body copy
+   aligns flush-left under the glyph (Testimonios quote cards). */
+.hanging-quote {
+  margin-left: -0.6em;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -31,4 +107,69 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  [data-reveal="fade-up"] {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Photographic treatment — brand-manual §07 CSS-layer composition. Treatment
+   applies at the wrapper (image asset stays reusable per lead M-36 answer #5):
+   .photo-treated frames a child <img>, draws a vignette via inset box-shadow,
+   stacks a gold-overlay (::after, mix-blend multiply) and an SVG-noise grain
+   (::before, mix-blend overlay) above it. The three @theme tokens are
+   --photo-vignette, --photo-overlay-gold, --photo-grain-opacity (G_A-11). */
+.photo-treated {
+  position: relative;
+  box-shadow: var(--photo-vignette);
+  background-blend-mode: multiply;
+}
+
+.photo-treated::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--photo-overlay-gold);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.photo-treated::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: var(--photo-grain-opacity);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Underline-grow link micro-state — brand-manual §08 "lento, deliberado y
+   elegante". The currentColor underline starts at 0 width and animates to
+   100% on hover OR keyboard focus, leaving the rest-state visually clean. No
+   consumer in v1.0 (ships ready for future inline-link copy). */
+.link-grow {
+  background: linear-gradient(currentColor, currentColor) bottom left / 0 1px no-repeat;
+  transition: background-size var(--duration-micro) var(--ease-elegant);
+}
+
+.link-grow:hover,
+.link-grow:focus-visible {
+  background-size: 100% 1px;
+}
+
+/* Card-hover micro-state — brand-manual §08 + O-12 §5 Pattern 6. Rest-state
+   is untouched (zero CLS); on hover the card lifts 2px and the border tints
+   dorado-imperial. Applied to Servicios + Testimonios <li> cards in v1.0. */
+.card-hover {
+  transition: transform var(--duration-micro) var(--ease-elegant), border-color
+    var(--duration-micro) var(--ease-elegant);
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-dorado-imperial);
 }

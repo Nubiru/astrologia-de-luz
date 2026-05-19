@@ -55,13 +55,13 @@ export interface WebhookStatusDeps {
 export type GetWebhookStatusFn = () => Promise<WebhookStatus>;
 
 /**
- * Production webhook URL — `${AUTH_URL}/api/telegram/webhook`. AUTH_URL is
+ * Production webhook URL — `${AUTH_URL}/api/webhook/telegram`. AUTH_URL is
  * the canonical absolute origin (validated as a URL by the zod boundary in
  * env.ts), so concatenating the path gives the deploy-time-stable expected
  * webhook target without a separate env var.
  */
 export function getExpectedWebhookUrl(): string {
-  return `${getEnv().AUTH_URL.replace(/\/$/, '')}/api/telegram/webhook`;
+  return `${getEnv().AUTH_URL.replace(/\/$/, '')}/api/webhook/telegram`;
 }
 
 /**

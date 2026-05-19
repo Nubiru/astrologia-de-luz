@@ -286,16 +286,102 @@ const RESERVAR = {
   },
 
   /**
-   * Step-placeholder body copy — G_A-7 ships the shell + picker; the día /
-   * horario / form bodies land in G_A-8 / G_A-9. These placeholder lines
-   * make the empty step containers visible to QA + the e2e specs that count
-   * visible steps in DOM order (AC-1.2.2).
+   * Step-placeholder body copy. G_A-8 shipped the real día + horario step
+   * bodies (DayStrip + SlotGrid) — the dia/horario placeholder slots were
+   * dropped at that point. `form` remains as G_A-9's still-holding copy.
    */
   stepPlaceholders: {
-    dia: 'Disponibilidad próxima en 14 días.',
-    horario: 'Horarios disponibles según el día elegido.',
     form: 'Completá tus datos y una intención breve para la sesión.',
   },
+
+  /* ────────────────────────────────────────────────────────────────────── *
+   * DAY STRIP + SLOT GRID — G_A-8 (AC-1.2.5 / AC-1.2.6 / AC-1.2.8).
+   *
+   * - `dayStripAriaLabel` doubles as the radiogroup's accessible name; the
+   *   AC fixes the literal verbatim so the value can't drift.
+   * - `slotGridAriaLabel` names the slot-button radiogroup.
+   * - `slotCountEmptyBadge` is the visible badge text on chips with zero
+   *   availability ("—" per AC-1.2.5).
+   * - `slotsEmptyState` renders inside the horario section when the chosen
+   *   day has no slots (selected-but-empty — distinct from "elegí un día").
+   * - `idleEmptyState` renders before any maestro has been picked (multi-
+   *   maestro mode — single-maestro hydrates immediately so it is unreached
+   *   in the v1.0 seed).
+   * - `pickADayHint` renders inside the horario section while no day is
+   *   selected yet (e.g., during the brief loading→ready window).
+   * - `tzDisplayLabel` + `tzDisplayChangeLabel` compose the AC-1.2.8 literal
+   *   "Zona horaria: <IANA> (UTC<±HH:MM>) · Cambiar" in `formatTzDisplay`.
+   * ────────────────────────────────────────────────────────────────────── */
+  dayStripAriaLabel: 'Elegí un día',
+  slotGridAriaLabel: 'Elegí un horario',
+  slotCountEmptyBadge: '—',
+  slotsEmptyState: 'No hay horarios disponibles para este día.',
+  idleEmptyState: 'Elegí un maestro para ver su disponibilidad.',
+  pickADayHint: 'Elegí un día arriba para ver los horarios disponibles.',
+  tzDisplayLabel: 'Zona horaria',
+  tzDisplayChangeLabel: 'Cambiar',
+
+  /* ────────────────────────────────────────────────────────────────────── *
+   * FORM — G_A-9 (AC-1.2.7 / AC-1.2.9 / AC-3.5.1 / AC-3.5.2 / AC-3.6.1).
+   *
+   * Server-side error strings live in `src/application/booking/validate-request.ts:ERR`
+   * (the zod-mirror — Spec AC-3.1.1). Client-side labels + helper text +
+   * generic error messages live here. Spanish copy verbatim per O-5 §D.
+   *
+   * `confirmationLineTemplate` carries the AC-1.2.9 dual-TZ literal with
+   * 6 placeholders interpolated by `ConfirmationPanel.formatConfirmationLine`.
+   * Keep the literal token-for-token — the e2e pairing asserts the structure
+   * via a regex anchored to the punctuation `, · (tu hora · `, etc.
+   * ────────────────────────────────────────────────────────────────────── */
+  FORM: {
+    eyebrow: 'Tus datos',
+    heading: 'Contame quién sos',
+    submitLabel: 'Enviar solicitud',
+    submittingLabel: 'Enviando…',
+    optionalSuffix: '(opcional)',
+    honeypotLabel: 'Empresa (no completar)',
+    contactPrefPlaceholder: 'Elegí un método',
+    contactValueHelp: 'Tu correo, tu WhatsApp o tu teléfono — el que mejor te quede.',
+    acceptsPendingLabel:
+      'Entiendo que la solicitud queda pendiente hasta que Augusto la confirme y me llegará un correo.',
+    labels: {
+      visitorName: 'Tu nombre',
+      visitorEmail: 'Correo electrónico',
+      contactPref: '¿Cómo te contactamos?',
+      contactValue: 'Cómo llegar a vos',
+      visitorIntent: 'Sobre qué te gustaría conversar',
+    },
+    contactPrefOptions: {
+      email: 'Correo',
+      whatsapp: 'WhatsApp',
+      phone: 'Teléfono',
+    },
+    errors: {
+      network: 'No pudimos conectarnos. Revisá tu conexión y probá de nuevo.',
+      unexpected: 'Algo no salió como esperábamos. Probá de nuevo en unos minutos.',
+    },
+  },
+
+  slotTakenToastSuffix: 'Elegí otro horario disponible más abajo.',
+  finePrintCancellationPrefix: 'Política de cancelación',
+
+  reservarTestimoniosEyebrow: 'QUIENES YA PASARON',
+  reservarTestimoniosHeading: 'Por una sesión, antes que vos',
+
+  /**
+   * Dual-TZ confirmation template — AC-1.2.9. 6 placeholders:
+   *   {date}         → "20 de mayo"        (Intl.es-AR day:'numeric', month:'long')
+   *   {visitorTime}  → "12:00"             (HH:MM 24h in visitor tz)
+   *   {visitorTz}    → "America/.../…"     (IANA visitor)
+   *   {teacherTime}  → "12:00"             (HH:MM 24h in teacher tz)
+   *   {teacher}      → "Augusto Rocha"     (display name)
+   *   {teacherTz}    → "America/.../…"     (IANA teacher)
+   */
+  confirmationLineTemplate:
+    'Tu solicitud: {date}, {visitorTime} (tu hora · {visitorTz}) · {teacherTime} (hora de {teacher}, {teacherTz}).',
+  confirmationHeading: '¡Recibimos tu solicitud!',
+  confirmationLede:
+    'Te confirmamos por correo en cuanto Augusto la apruebe. Mientras tanto, guardá este resumen.',
 } as const;
 
 export const CONTENT_PUBLIC = {

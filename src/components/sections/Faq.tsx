@@ -1,4 +1,5 @@
 import { CONTENT_PUBLIC } from '@/infrastructure/content/public';
+import { SectionReveal } from '../brand/SectionReveal';
 import { SectionWrapper } from '../brand/SectionWrapper';
 
 const FAQ_H2_ID = 'faq-h2';
@@ -13,12 +14,14 @@ export function Faq() {
       ariaLabelledby={FAQ_H2_ID}
       innerClassName="flex flex-col items-center gap-10 sm:gap-14"
     >
-      <h2
-        id={FAQ_H2_ID}
-        className="font-editorial italic text-3xl sm:text-4xl md:text-5xl leading-tight text-tinta-nocturna max-w-3xl text-center"
-      >
-        {heading}
-      </h2>
+      <SectionReveal>
+        <h2
+          id={FAQ_H2_ID}
+          className="font-editorial italic text-3xl sm:text-4xl md:text-5xl leading-tight text-tinta-nocturna max-w-3xl text-center"
+        >
+          {heading}
+        </h2>
+      </SectionReveal>
 
       <div data-brand="faq-list" className="flex flex-col gap-2 w-full max-w-3xl">
         {items.map((entry) => (
@@ -27,11 +30,11 @@ export function Faq() {
             data-brand="faq-entry"
             className="group border-b border-tinta-suave py-4"
           >
-            <summary className="font-display uppercase tracking-[0.15em] text-sm sm:text-base text-tinta-nocturna cursor-pointer list-none flex items-start justify-between gap-4">
+            <summary className="font-display uppercase tracking-display-md text-sm sm:text-base text-tinta-nocturna cursor-pointer list-none flex items-start justify-between gap-4">
               <span className="flex-1">{entry.q}</span>
               <span
                 aria-hidden="true"
-                className="font-display text-lg text-tinta-suave transition-transform group-open:rotate-45"
+                className="font-display text-lg text-tinta-suave transition-transform duration-micro ease-elegant group-open:rotate-45"
               >
                 +
               </span>

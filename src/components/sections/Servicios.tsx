@@ -1,5 +1,6 @@
 import { CONTENT_PUBLIC } from '@/infrastructure/content/public';
 import { Button } from '../brand/Button';
+import { SectionReveal } from '../brand/SectionReveal';
 import { SectionWrapper } from '../brand/SectionWrapper';
 
 const SERVICIOS_H2_ID = 'servicios-h2';
@@ -14,12 +15,14 @@ export function Servicios() {
       ariaLabelledby={SERVICIOS_H2_ID}
       innerClassName="flex flex-col items-center text-center gap-10 sm:gap-14"
     >
-      <h2
-        id={SERVICIOS_H2_ID}
-        className="font-editorial italic text-3xl sm:text-4xl md:text-5xl leading-tight text-blanco-estelar max-w-3xl"
-      >
-        {heading}
-      </h2>
+      <SectionReveal>
+        <h2
+          id={SERVICIOS_H2_ID}
+          className="font-editorial italic text-3xl sm:text-4xl md:text-5xl leading-tight text-blanco-estelar max-w-3xl"
+        >
+          {heading}
+        </h2>
+      </SectionReveal>
 
       <ul
         data-brand="servicios-grid"
@@ -29,14 +32,14 @@ export function Servicios() {
           <li
             key={service.name}
             data-brand="servicio-card"
-            className="flex flex-col gap-3 p-6 border border-tinta-media bg-tinta-media/40 rounded-sm"
+            className="flex flex-col gap-3 p-6 border border-tinta-media bg-tinta-media/40 rounded-sm card-hover"
           >
-            <h3 className="font-display uppercase tracking-[0.2em] text-sm text-dorado-imperial">
+            <h3 className="font-display uppercase tracking-display-md text-sm text-dorado-imperial">
               <span data-brand="servicio-name">{service.name}</span>
             </h3>
             <p
               data-brand="servicio-duration"
-              className="font-body text-xs text-plata-eterea uppercase tracking-[0.3em]"
+              className="font-body text-xs text-plata-eterea uppercase tracking-display-lg"
             >
               {service.duration}
             </p>

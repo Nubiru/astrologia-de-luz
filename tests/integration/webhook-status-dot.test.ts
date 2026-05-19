@@ -65,8 +65,8 @@ const okWebhookInfo = (url: string) => ({
 });
 
 describe('AC-3.7.6 — getExpectedWebhookUrl from AUTH_URL', () => {
-  test('appends /api/telegram/webhook to AUTH_URL without a trailing slash', () => {
-    expect(getExpectedWebhookUrl()).toBe('https://astrologiadeluz.test/api/telegram/webhook');
+  test('appends /api/webhook/telegram to AUTH_URL without a trailing slash', () => {
+    expect(getExpectedWebhookUrl()).toBe('https://astrologiadeluz.test/api/webhook/telegram');
   });
 });
 
@@ -106,7 +106,7 @@ describe('AC-3.7.6 — rojo branches (RPC fail OR url mismatch)', () => {
     // as rojo even though the RPC succeeded.
     const telegram = buildTelegramStub();
     vi.mocked(telegram.getWebhookInfo).mockResolvedValue(
-      okWebhookInfo('https://attacker.example/api/telegram/webhook'),
+      okWebhookInfo('https://attacker.example/api/webhook/telegram'),
     );
     const { clock } = buildClockStub(1_700_000_000_000);
     const statusFn = createGetWebhookStatus({ telegram, clock });
@@ -116,7 +116,7 @@ describe('AC-3.7.6 — rojo branches (RPC fail OR url mismatch)', () => {
     expect(status.ok).toBe(false);
     // The actual url IS captured so a tooltip can surface "actual vs
     // expected" — the boolean is what gates the color.
-    expect(status.url).toBe('https://attacker.example/api/telegram/webhook');
+    expect(status.url).toBe('https://attacker.example/api/webhook/telegram');
   });
 
   test('returns ok:false when url is the expected origin but a different path', async () => {

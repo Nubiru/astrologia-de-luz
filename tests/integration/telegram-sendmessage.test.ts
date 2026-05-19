@@ -131,14 +131,14 @@ describe('lib/telegram setWebhook — URL + body assembly', () => {
   test('POSTs to <BASE>/setWebhook with url + secret_token (snake_case)', async () => {
     const { calls } = stubFetch({ ok: true, result: true });
     await setWebhook({
-      url: 'https://astrologiadeluz.com/api/telegram/webhook',
+      url: 'https://astrologiadeluz.com/api/webhook/telegram',
       secretToken: 'shh-secret',
     });
     const call = calls[0];
     if (!call) throw new Error('expected at least one fetch call');
     expect(call[0]).toBe(`${EXPECTED_BASE}/setWebhook`);
     expect(parseBody(call)).toEqual({
-      url: 'https://astrologiadeluz.com/api/telegram/webhook',
+      url: 'https://astrologiadeluz.com/api/webhook/telegram',
       secret_token: 'shh-secret',
     });
   });
@@ -149,7 +149,7 @@ describe('lib/telegram getWebhookInfo — URL + body assembly', () => {
     const { calls } = stubFetch({
       ok: true,
       result: {
-        url: 'https://astrologiadeluz.com/api/telegram/webhook',
+        url: 'https://astrologiadeluz.com/api/webhook/telegram',
         has_custom_certificate: false,
         pending_update_count: 0,
       },

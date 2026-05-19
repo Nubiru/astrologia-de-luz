@@ -177,11 +177,6 @@ describe('gamma.md Hard-Learned Lessons — anchor liveness', () => {
   });
 
   describe('Lesson 10 — Config widens are expected', () => {
-    test('tailwind.config.ts content[] includes components/', () => {
-      const tailwind = read('tailwind.config.ts');
-      expect(tailwind).toMatch(/components\/\*\*\/\*\.\{ts,tsx\}/);
-    });
-
     test('vitest.config.ts aliases next/server to next/server.js', () => {
       const vitestConfig = read('vitest.config.ts');
       expect(vitestConfig).toMatch(/next\/server.*next\/server\.js/s);

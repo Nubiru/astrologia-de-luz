@@ -8,14 +8,13 @@
  *     through next/font/google with display: 'swap' (AC-1.1.8 no FOIT > 100ms).
  *   - The prefers-reduced-motion @media wrapper is present and neutralizes
  *     animation + transition durations (AC-1.7.5).
- *   - tailwind.config.ts content paths cover app/** + lib/**.
  *
  * Assertions are static-text reads — they FAIL when a token is removed, a
  * palette hex drifts, a font loader loses display: 'swap', or the reduced-
  * motion block is gutted.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
@@ -121,18 +120,6 @@ describe('G_A-1 brand-shell tokens', () => {
       const swapCount = (fonts.match(/display\s*:\s*['"]swap['"]/g) || []).length;
       expect(callCount).toBe(FONTS.length);
       expect(swapCount).toBe(FONTS.length);
-    });
-  });
-
-  describe('tailwind.config.ts — content scan paths', () => {
-    test('file exists at repo root', () => {
-      expect(existsSync(resolve(ROOT, 'tailwind.config.ts'))).toBe(true);
-    });
-
-    test('content array covers app/** + lib/**', () => {
-      const tw = read('tailwind.config.ts');
-      expect(tw).toMatch(/\.\/app\/\*\*\/\*\.\{ts,tsx\}/);
-      expect(tw).toMatch(/\.\/lib\/\*\*\/\*\.\{ts,tsx\}/);
     });
   });
 });

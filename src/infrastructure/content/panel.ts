@@ -168,6 +168,95 @@ const RESERVAR = {
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── *
+ * AGENDA — `/panel/agenda` UI strings (AC-1.4.1 + AC-1.4.2).
+ *
+ * Section headings render verbatim and are load-bearing for AC-1.4.1's DOM-
+ * order Playwright check (`<h2>` text matched against `sectionPending` /
+ * `sectionConfirmed`). The Aceptar / Rechazar button labels are the literal
+ * call-to-action on each pending row (AC-1.4.2).
+ *
+ * `verMas` is the AC-1.4.2 "Ver más" toggle copy that reveals the full intent
+ * note when the truncated 120-char preview is collapsed. The label is the
+ * spec-pinned phrase — drift here breaks the AC's verbatim contract.
+ *
+ * Row-field labels (`labelMaestro`, `labelVisitor`, ...) are accessible
+ * row-leading definitions consumed by the page row template. They carry no
+ * placeholders — pure static labels.
+ *
+ * `errorPatch` is shown inline when the Aceptar/Rechazar PATCH returns a
+ * non-2xx response that is not an invalid_transition (those rely on
+ * ERRORS.invalidTransition). Concrete fail-soft copy so the admin sees
+ * *something* instead of an empty state.
+ * ────────────────────────────────────────────────────────────────────────── */
+const AGENDA = {
+  pageTitle: 'Panel · Agenda',
+  // AC-1.4.1 — Section h2 headings; load-bearing for the DOM-order
+  // Playwright check.
+  sectionPending: 'Solicitudes pendientes',
+  sectionConfirmed: 'Agenda confirmada',
+  noPending: 'Por ahora no hay solicitudes pendientes.',
+  // AC-1.4.2 — action buttons + intent "Ver más" toggle.
+  aceptarButton: 'Aceptar',
+  rechazarButton: 'Rechazar',
+  verMas: 'Ver más',
+  // Row-field labels.
+  labelMaestro: 'Maestro',
+  labelVisitor: 'Visitante',
+  labelContact: 'Contacto',
+  labelIntent: 'Intención',
+  labelSlot: 'Horario',
+  labelSlotMaestroTz: 'Horario (zona del maestro)',
+  labelSlotVisitorTz: 'Horario (zona del visitante)',
+  // Channel labels (mirrors the AC-3.2.1 contactChannelLabel helper but the
+  // panel-row surface needs its own copy so the page does not pull
+  // application-layer code into a Server Component path).
+  channelEmail: 'email',
+  channelWhatsapp: 'WhatsApp',
+  channelPhone: 'teléfono',
+  // PATCH non-2xx fall-back copy (AC-3.4.3 invalidTransition still uses the
+  // ERRORS slot; this one covers network errors + 500 + 401).
+  errorPatch: 'No pudimos actualizar el estado. Probá nuevamente.',
+  // AC-1.4.3 — confirmed-calendar row affordances. The PATCH route's
+  // time-guard (route.ts::timeGuardSatisfied) is the load-bearing server-
+  // side check; these labels drive the disabled-state-with-tooltip
+  // surface on the buttons themselves.
+  completadaButton: 'Marcar como completada',
+  noShowButton: 'No-show',
+  completadaButtonLockedTooltip:
+    'Disponible cuando la sesión haya terminado (al menos 60 min después del inicio).',
+  noConfirmed: 'No hay sesiones confirmadas en los próximos 30 días.',
+  // AC-1.4.4 — 0-active-maestros card. The link target MUST resolve to
+  // /panel/maestros (G_B-8 surface); the link label is the prose verb so
+  // the card reads naturally with surrounding copy.
+  noMaestrosHeading: 'Empezá agregando un maestro',
+  noMaestrosBody: 'No hay maestros activos. Andá a',
+  noMaestrosLinkLabel: '/panel/maestros',
+  noMaestrosBodyAfter: 'para agregar uno.',
+  // AC-3.3.2 — banner at the top of /panel/agenda when failed sends > 0
+  // in the rolling 7-day window. `{count}` substitutes to the integer
+  // count; `revisar registro` is the load-bearing link label so the
+  // banner reads as a single sentence directing the admin to the listing.
+  bannerFailedTemplate: '{count} envío(s) fallaron en los últimos 7 días',
+  bannerFailedLinkLabel: 'revisar registro',
+  // AC-3.3.5 — `/panel/agenda/notificaciones-fallidas` page surface. The
+  // column labels are the <th> contents of the failed-log table. `colError`
+  // is intentionally a short noun ("Error") so the truncated error body
+  // renders without crowding the row.
+  failedListPageTitle: 'Panel · Notificaciones fallidas',
+  failedListHeading: 'Notificaciones fallidas',
+  failedListSubheading: 'Últimos 7 días',
+  failedListEmpty: 'No hay envíos fallidos en los últimos 7 días.',
+  failedColEvent: 'Evento',
+  failedColChannel: 'Canal',
+  failedColRecipient: 'Destinatario',
+  failedColStatus: 'Estado',
+  failedColAttempt: 'Intento',
+  failedColCreatedAt: 'Fecha',
+  failedColError: 'Error',
+  failedColAction: 'Acción',
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── *
  * Public surface — `CONTENT_PANEL` is the single import target for every
  * consumer (panel pages, Telegram dispatcher, mutation layer, public pages
  * for SLA + cancellation). The granular sub-modules above are intentionally
@@ -181,6 +270,7 @@ export const CONTENT_PANEL = {
   NOTIFY,
   LANDING,
   RESERVAR,
+  AGENDA,
 } as const;
 
 // Foundation-phase sentinel — G_C-1's install-smoke pairing asserts this

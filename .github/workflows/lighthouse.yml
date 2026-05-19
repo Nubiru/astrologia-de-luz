@@ -1,0 +1,53 @@
+name: Lighthouse
+
+# AC-1.7.6 launch gate. Runs Lighthouse against the live Vercel deployment for
+# the two public pages (`/` and `/reservar`) using two presets:
+#   - mobile  → Perf ≥ 0.85, A11y ≥ 0.95, SEO ≥ 0.95, BP ≥ 0.90
+#   - desktop → Perf ≥ 0.90, A11y ≥ 0.95, SEO ≥ 0.95, BP ≥ 0.90
+# Thresholds are NOT inlined here — they live in lighthouserc.<preset>.json so
+# the tests/ci/lighthouse-<preset>.spec.ts pairings can read a single source of
+# truth (treosh/lighthouse-ci-action consumes the same files). Editing the
+# YAML matrix without editing the config (or vice-versa) fails the qa:fast
+# pairing immediately.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '.context/**'
+      - '.claude/**'
+      - 'memory/**'
+      - 'TEMPORARY_ARCHIVE/**'
+      - 'tools/**'
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    name: Lighthouse (${{ matrix.preset }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [mobile, desktop]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            https://astrologia-de-luz.vercel.app/
+            https://astrologia-de-luz.vercel.app/reservar
+          configPath: ./lighthouserc.${{ matrix.preset }}.json
+          uploadArtifacts: true
+          temporaryPublicStorage: false

@@ -19,7 +19,7 @@ import { describe, expect, test } from 'vitest';
 
 import { Button } from '@/components/brand/Button';
 import { Footer } from '@/components/brand/Footer';
-import { LOGO_GLYPH, LOGO_WORDMARK, Logo } from '@/components/brand/Logo';
+import { LOGO_WORDMARK, Logo } from '@/components/brand/Logo';
 import { SectionWrapper } from '@/components/brand/SectionWrapper';
 
 const h = React.createElement;
@@ -43,10 +43,18 @@ describe('G_A-2 Logo', () => {
 
   test('decorative ring + glyph are aria-hidden (O-6 §6 decoration-only)', () => {
     const html = renderToStaticMarkup(h(Logo, { variant: 'positive' }));
-    const markMatch = html.match(/<span[^>]*data-brand="logo-mark"[^>]*>/);
+    // Post-G_A-16: the legacy <span data-brand="logo-mark">☽</span> ornament
+    // was migrated to <CrescentRing>, which wraps an SVG glyph in a
+    // <span aria-hidden="true" data-brand="crescent-ring">. Same decoration-only
+    // contract — only the carrier renamed.
+    const markMatch = html.match(/<span[^>]*data-brand="crescent-ring"[^>]*>/);
     expect(markMatch).not.toBeNull();
     expect(markMatch?.[0]).toContain('aria-hidden="true"');
-    expect(html).toContain(LOGO_GLYPH);
+    // The crescent moon is now SVG-vector (resolution-independent) — assert
+    // the SVG opener is present and the Unicode ☽ glyph is GONE from the
+    // rendered output (per AC-G_A-16.6 no-residual-glyph).
+    expect(html).toContain('<svg');
+    expect(html).not.toContain('☽');
   });
 
   test('wordmark is NOT aria-hidden — it is the visible-text equivalent (O-6 §6)', () => {
@@ -58,14 +66,17 @@ describe('G_A-2 Logo', () => {
 
   test('primary variant tints decoration in dorado-imperial (gold-on-dark passes AAA)', () => {
     const html = renderToStaticMarkup(h(Logo, { variant: 'primary' }));
-    expect(html).toContain('border-dorado-imperial');
+    // Post-G_A-16: CrescentRing's TONE_CLASS gold sets text-dorado-imperial; the
+    // SVG uses stroke="currentColor" + fill="currentColor" so the gold flows
+    // into the ring + crescent vector. Previously this carried
+    // `border-dorado-imperial` on the ☽ wrapper — that border-class is gone
+    // (no ring-border in the new SVG), the color invariant survives.
     expect(html).toContain('text-dorado-imperial');
     expect(html).toContain('text-blanco-estelar');
   });
 
   test('positive variant tints decoration in tinta-nocturna (ink-on-light passes AAA)', () => {
     const html = renderToStaticMarkup(h(Logo, { variant: 'positive' }));
-    expect(html).toContain('border-tinta-nocturna');
     expect(html).toContain('text-tinta-nocturna');
     // Positive variant MUST NOT tint the wordmark in gold/silver on light bg (AA fail).
     expect(html).not.toMatch(
