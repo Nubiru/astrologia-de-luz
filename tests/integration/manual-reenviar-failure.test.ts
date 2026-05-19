@@ -1,9 +1,10 @@
 /**
- * G_C-15 pairing — manual "Reenviar" — failure path (AC-3.3.5).
+ * G_C-15 / G_C-46 integration pairing — manual "Reenviar" failure path
+ * (AC-3.3.5).
  *
  * Counterpart of `manual-reenviar-success.test.ts`. Same setup, but the
- * dispatcher mock returns a Resend error payload (5xx). The retry endpoint
- * must:
+ * dispatcher stub returns an `ok: false` port result (5xx). The retry
+ * endpoint must:
  *
  *   1. Persist the new failure as a fresh `notify_log` row (so the listing
  *      page sees `attempt 1: 502` → `attempt 2: 503` and Augusto knows
@@ -11,6 +12,15 @@
  *   2. Still return 200 + the failure-flavour toast — the spec is explicit
  *      that the HTTP-response status is informational only; outcome flows
  *      through `CONTENT_PANEL.NOTIFY.reenviar_failed_toast`.
+ *
+ * G_C-46 refactor (M-20 / D-056, pilot 9/N — concern D.2, LAST cascade
+ * file): composition-level injection per the G_C-45 playbook + the per-port
+ * failure-injection setters from G_C-42 (notify-failure-logs.test.ts).
+ * `emailSender.setResultByEventKind('visitor_receipt', { ok: false, status,
+ * errorBody })` drives the retry-failed outcome through the REAL route
+ * handler + REAL repositories wrapping an in-memory libSQL fixture — only
+ * the side-effect ports (emailSender / telegram) are stubbed so trail-row
+ * assertions stay byte-identical.
  *
  * These assertions FAIL when:
  *   - The failure path mistakenly returns 5xx (would break the panel UI's
@@ -31,80 +41,43 @@ import { type LibSQLDatabase, drizzle } from 'drizzle-orm/libsql';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+import {
+  type EmailSenderStub,
+  type TelegramBotStub,
+  buildEmailSenderStub,
+  buildTelegramStub,
+  buildTestComposition,
+  installTestComposition,
+} from '../_helpers/dispatcher-stubs';
+
 const fx = vi.hoisted(() => ({
-  emailCalls: [] as Array<{
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
-    sessionId: string;
-    eventKind: string;
-    attempt: number;
-  }>,
   authResult: { user: { email: 'admin@astrologiadeluz.com' } } as {
     user: { email: string };
   } | null,
 }));
 
-vi.mock('@/lib/env', () => ({
-  getEnv: () => ({
-    ADMIN_EMAILS: 'augusto@astrologiadeluz.com',
-    TELEGRAM_BOT_TOKEN: '0000:test-token',
-    AUTH_RESEND_KEY: 're_test',
-    RESEND_FROM: 'no-reply@astrologiadeluz.com',
-  }),
-}));
-
-vi.mock('@/auth', () => ({
+// Auth-gate is the route's integration seam — keep mocked so the route
+// reaches the use-case (the failure-path tests bypass the 401 short-circuit
+// and exercise the retryFailed orchestration end-to-end).
+vi.mock('@/infrastructure/auth/config', () => ({
   auth: vi.fn(async () => fx.authResult),
 }));
 
-vi.mock('@/lib/resend', () => ({
-  sendEmail: vi.fn(
-    async (input: {
-      to: string;
-      subject: string;
-      html: string;
-      text: string;
-      sessionId: string;
-      eventKind: string;
-      attempt: number;
-    }) => {
-      fx.emailCalls.push(input);
-      // Mirror the Resend SDK's failure payload shape (see lib/resend.ts +
-      // lib/notify/shared.ts dispatchEmail mapping).
-      return {
-        data: null,
-        error: { statusCode: 503, message: 'Resend transient failure (mocked)' },
-      };
-    },
-  ),
-  idempotencyKey: vi.fn(
-    (i: { sessionId: string; eventKind: string; attempt: number }) =>
-      `mock-${i.sessionId}:${i.eventKind}:${i.attempt}`,
-  ),
-}));
-
-vi.mock('@/lib/telegram', () => ({
-  sendMessage: vi.fn(async () => ({
-    ok: true as const,
-    result: { message_id: 1, chat: { id: 1 } },
-  })),
-}));
-
-import { type Session, type Teacher, notifyLog, sessions } from '@/db/schema';
+import { type Session, type Teacher, notifyLog, sessions } from '@/infrastructure/db/schema';
+import * as schema from '@/infrastructure/db/schema';
 import { runMigrations } from '../../scripts/migrate';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 const REF_NOW = 1_779_789_600_000;
 const AUGUSTO_CHAT_ID = '999111223';
 const LOG_ID = 'log-orig-2';
+const RETRY_FAILURE_BODY = 'Resend transient failure (mocked)';
 
 type Fixture = {
   workdir: string;
   client: Client;
-  db: LibSQLDatabase<Record<string, never>>;
+  db: LibSQLDatabase<typeof schema>;
 };
 
 async function makeFixture(): Promise<Fixture> {
@@ -112,7 +85,7 @@ async function makeFixture(): Promise<Fixture> {
   const dbPath = join(workdir, 'test.db');
   closeSync(openSync(dbPath, 'w'));
   const client = createClient({ url: `file:${dbPath}` });
-  const db = drizzle(client) as LibSQLDatabase<Record<string, never>>;
+  const db = drizzle(client, { schema });
   await runMigrations(db, 'augusto@astrologiadeluz.com', MIGRATIONS);
   return { workdir, client, db };
 }
@@ -138,7 +111,7 @@ async function loadAugusto(client: Client): Promise<Teacher> {
 }
 
 async function insertPendingSession(
-  db: LibSQLDatabase<Record<string, never>>,
+  db: LibSQLDatabase<typeof schema>,
   augusto: Teacher,
 ): Promise<Session> {
   const inserted = await db
@@ -165,7 +138,7 @@ async function insertPendingSession(
 }
 
 async function insertFailedLog(
-  db: LibSQLDatabase<Record<string, never>>,
+  db: LibSQLDatabase<typeof schema>,
   sessionId: string,
 ): Promise<void> {
   await db.insert(notifyLog).values({
@@ -193,9 +166,27 @@ describe('G_C-15 — manual Reenviar failure path (AC-3.3.5)', () => {
   let f: Fixture;
   let augusto: Teacher;
   let session: Session;
+  let emailSender: EmailSenderStub;
+  let telegram: TelegramBotStub;
 
   beforeEach(async () => {
-    fx.emailCalls.length = 0;
+    // The REAL maestros.repository.findBrandOwner() reads
+    // `getEnv().ADMIN_EMAILS` to resolve the brand-owner row. Composition
+    // injection bypasses every adapter the production composition factory
+    // creates, but the REAL repository inside testComposition still reaches
+    // env at invocation time. Set the values directly — mirrors
+    // tests/unit/composition-wiring.test.ts and G_C-45's success-path test.
+    process.env.TURSO_DATABASE_URL = 'file::memory:?cache=shared';
+    process.env.TURSO_AUTH_TOKEN = 'manual-reenviar-fail-fixture';
+    process.env.AUTH_SECRET = 'a'.repeat(48);
+    process.env.AUTH_URL = 'http://localhost:3000';
+    process.env.AUTH_RESEND_KEY = 're_manual_reenviar_fail_fixture';
+    process.env.RESEND_FROM = 'Astrologia de Luz <no-reply@manual-reenviar-fail.test>';
+    process.env.ADMIN_EMAILS = 'augusto@astrologiadeluz.com';
+    process.env.TELEGRAM_BOT_TOKEN = '1:manual-reenviar-fail-fixture';
+    process.env.TELEGRAM_BOT_USERNAME = 'ManualReenviarFailBot';
+    process.env.TELEGRAM_WEBHOOK_SECRET = 'b'.repeat(48);
+
     fx.authResult = { user: { email: 'admin@astrologiadeluz.com' } };
     f = await makeFixture();
     await f.client.execute(
@@ -205,9 +196,25 @@ describe('G_C-15 — manual Reenviar failure path (AC-3.3.5)', () => {
     session = await insertPendingSession(f.db, augusto);
     await insertFailedLog(f.db, session.id);
 
-    const dbClientMod = await import('@/db/client');
-    vi.spyOn(dbClientMod, 'getDb').mockReturnValue(
-      f.db as unknown as ReturnType<typeof dbClientMod.getDb>,
+    // Test composition: REAL repositories over the in-memory DB (trail-row
+    // assertions stay byte-identical with AC-3.3.5) + stubbed side-effect
+    // ports. Pre-seed the email failure via setResultByEventKind so EVERY
+    // retry of `visitor_receipt` returns the injected 503 / errorBody pair
+    // — drives the retry_failed outcome end-to-end without touching
+    // production code.
+    emailSender = buildEmailSenderStub();
+    emailSender.setResultByEventKind('visitor_receipt', {
+      ok: false,
+      status: 503,
+      errorBody: RETRY_FAILURE_BODY,
+    });
+    telegram = buildTelegramStub();
+    installTestComposition(
+      buildTestComposition(f.db, {
+        emailSender,
+        telegram,
+        clock: { now: () => new Date(REF_NOW) },
+      }),
     );
   });
 
@@ -246,16 +253,16 @@ describe('G_C-15 — manual Reenviar failure path (AC-3.3.5)', () => {
     expect(rows[1]?.attemptNumber).toBe(2);
     expect(rows[1]?.eventKind).toBe('visitor_receipt');
     expect(rows[1]?.channel).toBe('resend');
-    expect(rows[1]?.errorBody).toBe('Resend transient failure (mocked)');
+    expect(rows[1]?.errorBody).toBe(RETRY_FAILURE_BODY);
     expect(rows[1]?.sessionId).toBe(session.id);
   });
 
   test('the failure path still fired the dispatch (attempt=2) — caller sees evidence of the try', async () => {
     await callRetry(LOG_ID);
 
-    expect(fx.emailCalls).toHaveLength(1);
-    expect(fx.emailCalls[0]?.attempt).toBe(2);
-    expect(fx.emailCalls[0]?.eventKind).toBe('visitor_receipt');
+    expect(emailSender.calls).toHaveLength(1);
+    expect(emailSender.calls[0]?.attempt).toBe(2);
+    expect(emailSender.calls[0]?.eventKind).toBe('visitor_receipt');
     // Idempotency-key axes (sessionId + eventKind + attempt) carry the
     // bumped attempt — Resend dedupe must treat this as a NEW send.
   });

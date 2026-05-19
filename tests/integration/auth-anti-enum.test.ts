@@ -56,7 +56,7 @@ vi.hoisted(() => {
   for (const [k, v] of Object.entries({
     // `:memory:` is honoured verbatim by @libsql/client — same code path the
     // wave-1 migration integration tests rely on. The zod boundary in
-    // `lib/env.ts` only requires `min(1)` on TURSO_DATABASE_URL, so this
+    // `src/infrastructure/env/index.ts` only requires `min(1)` on TURSO_DATABASE_URL, so this
     // satisfies the validator without bypassing it.
     TURSO_DATABASE_URL: ':memory:',
     TURSO_AUTH_TOKEN: 'fixture-token',
@@ -131,7 +131,7 @@ function installFetchStub(): void {
 // input — the handler reads only `url` + `method` + `headers` + `body`, all
 // standard Fetch surface — but TypeScript can't prove substitutability, so we
 // cast at the boundary.
-type Handlers = typeof import('@/auth')['handlers'];
+type Handlers = typeof import('@/infrastructure/auth/config')['handlers'];
 type HandlerInput = Parameters<Handlers['GET']>[0];
 
 async function fetchCsrf(handlers: Handlers) {
@@ -177,24 +177,27 @@ async function postSignin(
 // ---------------------------------------------------------------------------
 
 let handlers: Handlers;
-let dbClient: ReturnType<typeof import('@/db/client')['getClient']>;
+let dbClient: ReturnType<typeof import('@/infrastructure/db/client')['getClient']>;
 
 beforeAll(async () => {
   // Resolve `@/db/client` first — that triggers the real client construction
   // against `:memory:`. Then apply every migration to that client so the
   // adapter tables (G_C-3) exist before Auth.js's first adapter call.
-  const dbMod = await import('@/db/client');
+  const dbMod = await import('@/infrastructure/db/client');
   dbClient = dbMod.getClient();
 
   await dbClient.execute('PRAGMA foreign_keys = ON');
   for (const name of MIGRATION_FILES) {
-    const text = readFileSync(resolve(REPO_ROOT, 'db', 'migrations', name), 'utf8');
+    const text = readFileSync(
+      resolve(REPO_ROOT, 'src', 'infrastructure', 'db', 'migrations', name),
+      'utf8',
+    );
     for (const stmt of splitStatements(text)) {
       await dbClient.execute(stmt);
     }
   }
 
-  ({ handlers } = await import('@/auth'));
+  ({ handlers } = await import('@/infrastructure/auth/config'));
 });
 
 afterAll(() => {
@@ -258,7 +261,9 @@ describe('AC-2.4.2 — JWT session strategy + 7-day cookie maxAge', () => {
     // Pulling the config independently of NextAuth() keeps the assertion
     // pure-structural — if the JWT strategy regresses to "database", an
     // unrelated Edge route would silently break at deploy time. Catch it here.
-    const { buildAuthConfig, SESSION_MAX_AGE_SECONDS } = await import('@/auth');
+    const { buildAuthConfig, SESSION_MAX_AGE_SECONDS } = await import(
+      '@/infrastructure/auth/config'
+    );
     const authConfig = buildAuthConfig();
     expect(authConfig.session?.strategy).toBe('jwt');
     expect(authConfig.session?.maxAge).toBe(SESSION_MAX_AGE_SECONDS);

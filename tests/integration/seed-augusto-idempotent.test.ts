@@ -26,7 +26,7 @@ import { resolve } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
-const MIG_DIR = resolve(__dirname, '..', '..', 'db', 'migrations');
+const MIG_DIR = resolve(__dirname, '..', '..', 'src', 'infrastructure', 'db', 'migrations');
 const APPLY_ORDER = [
   '0000_init.sql',
   '0001_authjs.sql',

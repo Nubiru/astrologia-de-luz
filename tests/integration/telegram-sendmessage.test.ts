@@ -21,13 +21,13 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-vi.mock('@/lib/env', () => ({
+vi.mock('@/infrastructure/env', () => ({
   getEnv: () => ({
     TELEGRAM_BOT_TOKEN: '1234567890:TEST-TOKEN-FIXTURE',
   }),
 }));
 
-import { getWebhookInfo, sendMessage, setWebhook } from '@/lib/telegram';
+import { getWebhookInfo, sendMessage, setWebhook } from '@/infrastructure/telegram/client';
 
 const EXPECTED_BASE = 'https://api.telegram.org/bot1234567890:TEST-TOKEN-FIXTURE';
 

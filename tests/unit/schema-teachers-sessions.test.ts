@@ -20,7 +20,7 @@
 import { SQLiteSyncDialect, getTableConfig } from 'drizzle-orm/sqlite-core';
 import { describe, expect, test } from 'vitest';
 
-import { sessions, teachers } from '@/db/schema';
+import { sessions, teachers } from '@/infrastructure/db/schema';
 
 const dialect = new SQLiteSyncDialect();
 const teachersConfig = getTableConfig(teachers);

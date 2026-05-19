@@ -66,7 +66,7 @@ const SESSION_COOKIE_NAME = 'authjs.session-token';
 
 type RouteHandler = (req: NextRequest) => Promise<Response>;
 let routeGET: RouteHandler;
-let dbClient: ReturnType<typeof import('@/db/client')['getClient']>;
+let dbClient: ReturnType<typeof import('@/infrastructure/db/client')['getClient']>;
 
 async function craftSessionCookie(): Promise<string> {
   // Use the same encode() Auth.js uses internally so the route handler reads
@@ -98,11 +98,14 @@ async function craftSessionCookie(): Promise<string> {
 beforeAll(async () => {
   // Bootstrap the shared in-memory libsql client BEFORE auth.ts loads, so the
   // adapter has a real DB to attach to.
-  const dbMod = await import('@/db/client');
+  const dbMod = await import('@/infrastructure/db/client');
   dbClient = dbMod.getClient();
   await dbClient.execute('PRAGMA foreign_keys = ON');
   for (const name of MIGRATION_FILES) {
-    const text = readFileSync(resolve(REPO_ROOT, 'db', 'migrations', name), 'utf8');
+    const text = readFileSync(
+      resolve(REPO_ROOT, 'src', 'infrastructure', 'db', 'migrations', name),
+      'utf8',
+    );
     for (const stmt of splitStatements(text)) {
       await dbClient.execute(stmt);
     }
@@ -160,7 +163,7 @@ describe('AC-2.4.6 — GET /api/auth/session contract', () => {
 
 describe('AC-2.4.6 — route file re-exports `@/auth` handlers', () => {
   test('route.GET === auth.handlers.GET (no parallel implementation)', async () => {
-    const { handlers } = await import('@/auth');
+    const { handlers } = await import('@/infrastructure/auth/config');
     const routeMod = await import('@/app/api/auth/[...nextauth]/route');
     // Reference identity: the destructured `GET` in route.ts MUST be the
     // same function object Auth.js builds in auth.ts. If a future refactor

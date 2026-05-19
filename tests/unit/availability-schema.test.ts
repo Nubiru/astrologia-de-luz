@@ -19,7 +19,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { AvailabilityShape, availabilityWriteSchema } from '@/lib/availability/schema';
+import { AvailabilityShape, availabilityWriteSchema } from '@/domain/booking/availability';
 
 const VALID = {
   tz: 'America/Argentina/Buenos_Aires',

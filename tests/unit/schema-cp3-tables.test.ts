@@ -27,7 +27,7 @@ import {
   sessions,
   teacherOnboardingTokens,
   teachers,
-} from '@/db/schema';
+} from '@/infrastructure/db/schema';
 
 const dialect = new SQLiteSyncDialect();
 const notifyLogConfig = getTableConfig(notifyLog);

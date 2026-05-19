@@ -26,7 +26,7 @@ import { resolve } from 'node:path';
 import { NextRequest } from 'next/server';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 
-import { sessions } from '@/db/schema';
+import { sessions } from '@/infrastructure/db/schema';
 
 vi.hoisted(() => {
   const { closeSync, mkdtempSync, openSync } = require('node:fs') as typeof import('node:fs');
@@ -53,7 +53,7 @@ vi.hoisted(() => {
 
 const fx = vi.hoisted(() => ({ dispatchCalls: [] as unknown[] }));
 
-vi.mock('@/lib/notify/dispatch-pending', () => ({
+vi.mock('@/application/notify/dispatch-pending', () => ({
   dispatchPending: vi.fn(async (input: unknown) => {
     fx.dispatchCalls.push(input);
     return { outcomes: [], failures: [] };
@@ -87,8 +87,8 @@ const splitStatements = (raw: string): string[] =>
 
 type RoutePOST = (request: NextRequest) => Promise<Response>;
 let routePOST: RoutePOST;
-let dbClient: ReturnType<typeof import('@/db/client')['getClient']>;
-let dbInstance: ReturnType<typeof import('@/db/client')['getDb']>;
+let dbClient: ReturnType<typeof import('@/infrastructure/db/client')['getClient']>;
+let dbInstance: ReturnType<typeof import('@/infrastructure/db/client')['getDb']>;
 
 const futureSlotIso = (): string => {
   const t = new Date(new Date().getTime() + 24 * 60 * 60 * 1000);
@@ -123,12 +123,15 @@ const callPost = (body: Record<string, unknown>) =>
   );
 
 beforeAll(async () => {
-  const dbModule = await import('@/db/client');
+  const dbModule = await import('@/infrastructure/db/client');
   dbClient = dbModule.getClient();
   dbInstance = dbModule.getDb();
   await dbClient.execute('PRAGMA foreign_keys = ON');
   for (const file of MIGRATION_FILES) {
-    const raw = readFileSync(resolve(REPO_ROOT, 'db', 'migrations', file), 'utf8');
+    const raw = readFileSync(
+      resolve(REPO_ROOT, 'src', 'infrastructure', 'db', 'migrations', file),
+      'utf8',
+    );
     const sql =
       file === '0003_seed_augusto.sql' ? renderSeed(raw, 'augusto@astrologiadeluz.com') : raw;
     for (const stmt of splitStatements(sql)) {
@@ -154,7 +157,7 @@ afterEach(() => {
 });
 
 // Spy that throws only when the route inserts into the `sessions` table. The
-// rate-limit gate (lib/rate-limit.ts) ALSO calls db.insert (on the
+// rate-limit gate (src/infrastructure/rate-limit/token-bucket.ts) ALSO calls db.insert (on the
 // rate_limit_buckets table) earlier in the request lifecycle — a blanket
 // `db.insert` mock would short-circuit the rate-limit and the route would
 // never reach the session insert under test. Narrowing by table reference

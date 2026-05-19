@@ -155,7 +155,7 @@ describe('G_A-5/G_A-6 heading hierarchy — AC-1.1.6', () => {
 
 describe('G_A-5/G_A-6 CONTENT slot drive — AC-1.1.5 / AC-1.1.10', () => {
   test('CONTENT_PUBLIC.HOME values appear in the rendered HTML across all sections', async () => {
-    const { CONTENT_PUBLIC } = await import('@/lib/content/public');
+    const { CONTENT_PUBLIC } = await import('@/infrastructure/content/public');
     const { HOME } = CONTENT_PUBLIC;
 
     expect(rendered).toContain(HOME.problemas.heading);
@@ -190,7 +190,7 @@ describe('G_A-5/G_A-6 CONTENT slot drive — AC-1.1.5 / AC-1.1.10', () => {
 
 describe('G_A-6 FAQ surfaces cross-pool slot drive — AC-3.8.1 / AC-3.8.2', () => {
   test('CONTENT_PANEL.LANDING.sla.text appears verbatim inside #faq', async () => {
-    const { CONTENT_PANEL } = await import('@/lib/content/panel');
+    const { CONTENT_PANEL } = await import('@/infrastructure/content/panel');
     const open = /<section\b[^>]*\bid="faq"[^>]*>/;
     const start = rendered.search(open);
     expect(start).toBeGreaterThan(-1);
@@ -199,7 +199,7 @@ describe('G_A-6 FAQ surfaces cross-pool slot drive — AC-3.8.1 / AC-3.8.2', () 
   });
 
   test('CONTENT_PANEL.RESERVAR.cancellation.text appears verbatim inside #faq', async () => {
-    const { CONTENT_PANEL } = await import('@/lib/content/panel');
+    const { CONTENT_PANEL } = await import('@/infrastructure/content/panel');
     const open = /<section\b[^>]*\bid="faq"[^>]*>/;
     const start = rendered.search(open);
     const faqSlice = rendered.slice(start);
@@ -209,7 +209,7 @@ describe('G_A-6 FAQ surfaces cross-pool slot drive — AC-3.8.1 / AC-3.8.2', () 
 
 describe('G_A-6 FAQ uses native <details>/<summary> — AC-1.1.11', () => {
   test('the #faq section contains one <details> per FAQ entry', async () => {
-    const { CONTENT_PUBLIC } = await import('@/lib/content/public');
+    const { CONTENT_PUBLIC } = await import('@/infrastructure/content/public');
     const open = /<section\b[^>]*\bid="faq"[^>]*>/;
     const start = rendered.search(open);
     const closeIdx = rendered.indexOf('</section>', start);

@@ -16,7 +16,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { ENV_ERROR_HEADER, parseEnv } from '@/lib/env';
+import { ENV_ERROR_HEADER, parseEnv } from '@/infrastructure/env';
 
 const VALID = {
   TURSO_DATABASE_URL: 'libsql://astrologiadeluz-test.turso.io',

@@ -39,7 +39,7 @@ import { drizzle } from 'drizzle-orm/libsql';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { describe, expect, test } from 'vitest';
 
-import { account, session, user, verificationToken } from '@/db/schema';
+import { account, session, user, verificationToken } from '@/infrastructure/db/schema';
 
 const userConfig = getTableConfig(user);
 const accountConfig = getTableConfig(account);

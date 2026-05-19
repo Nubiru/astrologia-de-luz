@@ -18,7 +18,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { slugify, slugifyUnique } from '@/lib/slugify';
+import { slugify, slugifyUnique } from '@/domain/maestros/slugify';
 
 describe('slugify — AC-2.1.3 pipeline', () => {
   test('plain ASCII name kebab-cases (the happy path)', () => {

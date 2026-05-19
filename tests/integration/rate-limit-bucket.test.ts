@@ -35,11 +35,16 @@ import { sql } from 'drizzle-orm';
 import { type LibSQLDatabase, drizzle } from 'drizzle-orm/libsql';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
-import { HOUR_MS, MAX_REQUESTS_PER_HOUR, checkRateLimit, pruneOlderThan } from '@/lib/rate-limit';
+import {
+  HOUR_MS,
+  MAX_REQUESTS_PER_HOUR,
+  checkRateLimit,
+  pruneOlderThan,
+} from '@/infrastructure/rate-limit/token-bucket';
 import { runMigrations } from '../../scripts/migrate';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 
 // Pinned reference time so the hour-bucket math is deterministic across runs.
 // 2026-05-18T10:00:00Z → bucket = floor(1779789600000 / 3_600_000) = 494386.

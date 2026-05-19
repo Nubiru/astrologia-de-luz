@@ -25,7 +25,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { isAdminEmail, parseAdminAllowlist } from '@/lib/auth/allowlist';
+import { isAdminEmail, parseAdminAllowlist } from '@/infrastructure/auth/allowlist';
 
 describe('parseAdminAllowlist — env-string → normalized list', () => {
   test('returns [] for nullish input (defensive default)', () => {

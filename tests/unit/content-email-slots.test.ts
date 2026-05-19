@@ -22,7 +22,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { CONTENT_EMAIL, type EmailSlot } from '@/lib/content/email';
+import { CONTENT_EMAIL, type EmailSlot } from '@/infrastructure/content/email';
 
 const MIN_BODY_CHARS = 50; // AC-2.5.2 smoke
 const DECLINE_MIN_CHARS = 80; // AC-3.8.3 substantive body

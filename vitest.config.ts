@@ -32,6 +32,15 @@ export default defineConfig({
       'tests/**/*.spec.tsx',
       'tests/**/*.test.ts',
       'tests/**/*.test.tsx',
+      // G_C-26 W4-1 foundation: allow co-located src/ tests once future waves
+      // add them. Current state: src/ holds the 3 legacy barrels + .gitkeeps;
+      // there are no tests under src/ yet, so the glob is currently inert.
+      // Tests will continue to LIVE at /tests per Hook-CP1-2 (D-046 / S-2 CP-1
+      // approved). This is "extend, don't relocate."
+      'src/**/*.spec.ts',
+      'src/**/*.spec.tsx',
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
     ],
     exclude: ['tests/e2e/**', 'node_modules', '.next'],
     environment: 'node',

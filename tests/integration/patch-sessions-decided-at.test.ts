@@ -42,7 +42,7 @@ const fx = vi.hoisted(() => ({
   dispatchCalls: [] as Array<{ from: string; to: string; sessionId: string }>,
 }));
 
-vi.mock('@/lib/env', () => ({
+vi.mock('@/infrastructure/env', () => ({
   getEnv: () => ({
     ADMIN_EMAILS: 'admin@allowed.test',
     TELEGRAM_BOT_TOKEN: '0000:test-token',
@@ -51,11 +51,11 @@ vi.mock('@/lib/env', () => ({
   }),
 }));
 
-vi.mock('@/auth', () => ({
+vi.mock('@/infrastructure/auth/config', () => ({
   auth: vi.fn(async () => fx.authResult),
 }));
 
-vi.mock('@/lib/notify/dispatch-transition', () => ({
+vi.mock('@/application/notify/dispatch-transition', () => ({
   dispatchTransition: vi.fn(
     async (input: {
       session: { id: string; status: string };
@@ -71,13 +71,13 @@ vi.mock('@/lib/notify/dispatch-transition', () => ({
   ),
 }));
 
-vi.mock('@/lib/telegram', () => ({
+vi.mock('@/infrastructure/telegram/client', () => ({
   sendMessage: vi.fn(async () => ({
     ok: true as const,
     result: { message_id: 1, chat: { id: 1 } },
   })),
 }));
-vi.mock('@/lib/resend', () => ({
+vi.mock('@/infrastructure/email/resend', () => ({
   sendEmail: vi.fn(async () => ({ data: { id: 'mock' }, error: null })),
   idempotencyKey: vi.fn(
     (i: { sessionId: string; eventKind: string; attempt: number }) =>
@@ -85,11 +85,11 @@ vi.mock('@/lib/resend', () => ({
   ),
 }));
 
-import { type Teacher, sessions } from '@/db/schema';
+import { type Teacher, sessions } from '@/infrastructure/db/schema';
 import { runMigrations } from '../../scripts/migrate';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 const SESS_ID = 'sess-decided-at-1';
 
 type Fixture = {
@@ -180,7 +180,7 @@ describe('G_C-11 — decided_at first-write + AC-3.4.4 note-only + AC-3.4.1 auth
     augusto = await loadAugusto(f.client);
     await seedPending(f.db, augusto);
 
-    const dbClientMod = await import('@/db/client');
+    const dbClientMod = await import('@/infrastructure/db/client');
     vi.spyOn(dbClientMod, 'getDb').mockReturnValue(
       f.db as unknown as ReturnType<typeof dbClientMod.getDb>,
     );

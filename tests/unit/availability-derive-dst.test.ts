@@ -28,8 +28,8 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { deriveSlots } from '@/lib/availability/derive';
-import type { Availability } from '@/lib/availability/schema';
+import { deriveSlots } from '@/application/booking/derive-availability';
+import type { Availability } from '@/domain/booking/availability';
 
 const BSAS = 'America/Argentina/Buenos_Aires';
 const MADRID = 'Europe/Madrid';

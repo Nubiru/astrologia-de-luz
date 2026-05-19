@@ -26,14 +26,14 @@
  *      between run #1 and run #2 survives run #2 (proves the seed INSERT did
  *      NOT fire a second time and trample the lead's edit).
  *   5. The substitution staging dir is per-run scoped (tmp dir) — does NOT
- *      mutate the in-tree `db/migrations/*.sql` files. Asserted by reading
+ *      mutate the in-tree `src/infrastructure/db/migrations/*.sql` files. Asserted by reading
  *      the on-disk `0003_seed_augusto.sql` before + after both runs.
  *
  * What this catches (and why each assertion exists):
  *   - migrate.ts is silently swapped to non-libsql migrator (e.g.,
  *     `drizzle-orm/better-sqlite3`) — the runtime DB shape mismatch fails
  *     fixture creation.
- *   - The staging dir copy step is removed — db/migrations would be mutated
+ *   - The staging dir copy step is removed — src/infrastructure/db/migrations would be mutated
  *     in-place, the on-disk-unchanged assertion fails.
  *   - The substitution forgets to use SQL-escape — the apostrophe-email
  *     assertion fails.
@@ -53,7 +53,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { runMigrations } from '../../scripts/migrate';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 const SEED_FILE = resolve(MIGRATIONS, '0003_seed_augusto.sql');
 
 const EXPECTED_APP_TABLES = [
@@ -144,7 +144,7 @@ describe('G_C-5 — scripts/migrate.ts idempotency (AC-2.3.3)', () => {
     expect(augusto.rows[0]?.email).toBe("o'malley@example.com");
   });
 
-  test('staging is out-of-tree — on-disk db/migrations/0003 is unchanged after the run', async () => {
+  test('staging is out-of-tree — on-disk src/infrastructure/db/migrations/0003 is unchanged after the run', async () => {
     await runMigrations(fx.db, 'admin@example.com', MIGRATIONS);
     const seedAfter = readFileSync(SEED_FILE, 'utf8');
     expect(seedAfter).toBe(seedBefore);

@@ -1,14 +1,16 @@
 /**
- * G_B-4 integration pairing — webhook status helper (AC-3.7.6).
+ * G_B-4 / G_C-38 integration pairing — webhook status helper (AC-3.7.6).
  *
- * Drives `getWebhookStatus()` from `lib/panel/webhook-status.ts` end-to-end
- * against a mocked `getWebhookInfo` from `lib/telegram`, validating the four
- * branches of the verde/rojo state machine PLUS the 5-minute cache TTL.
+ * Drives `createGetWebhookStatus({ telegram, clock })` factory instances end-
+ * to-end against hand-rolled `TelegramBot` + `Clock` stubs, validating the
+ * four branches of the verde/rojo state machine PLUS the 5-minute cache TTL.
  *
- * The helper is the single source of truth for the status dot color — the
- * layout consumes `.ok` and maps it directly to
- * `CONTENT_PANEL.STATUS.webhook_ok` vs `webhook_broken`. A regression in the
- * helper's boolean output silently flips the dot's color in production.
+ * G_C-38 refactor (M-20 / D-056): the legacy module-mocked + arg-injected
+ * clock shape is replaced by Path A — each test (or sub-block) builds its own
+ * factory instance with full control over both ports. No `vi.mock` of the
+ * telegram client; no `__resetWebhookStatusCache` calls. The default-instance
+ * path (`getWebhookStatus()` with no args) is wired by the composition root
+ * and smoke-tested in G_C-36 — out of scope for this file.
  *
  * Fails when:
  *   - `getExpectedWebhookUrl()` drifts away from `${AUTH_URL}/api/telegram/
@@ -19,11 +21,13 @@
  *   - The cache TTL regresses to a different value or stops invalidating —
  *     either a stale rojo persists past the 5-minute window OR every page
  *     render hits Telegram's API (rate-limit blowup).
- *   - A future "simplification" removes the time-injection seam and the
+ *   - A future "simplification" removes the clock-injection seam and the
  *     cache becomes untestable.
+ *   - Per-instance cache regresses into a module-scoped singleton (would
+ *     leak state across factory instances and silently couple tests).
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 vi.hoisted(() => {
   for (const [k, v] of Object.entries({
@@ -31,7 +35,7 @@ vi.hoisted(() => {
     TURSO_AUTH_TOKEN: 'fixture-token',
     AUTH_SECRET: 'w'.repeat(48),
     // AUTH_URL drives `getExpectedWebhookUrl()` — pin it so the helper
-    // produces a deterministic expected URL the mock can match.
+    // produces a deterministic expected URL the stubs can match.
     AUTH_URL: 'https://astrologiadeluz.test',
     AUTH_RESEND_KEY: 're_fixture_webhook',
     RESEND_FROM: 'no-reply@webhook.test',
@@ -44,37 +48,20 @@ vi.hoisted(() => {
   }
 });
 
-// Stub the Telegram client at the import boundary — the helper depends on
-// `getWebhookInfo` and nothing else from lib/telegram, so the mock surface
-// is minimal.
-vi.mock('@/lib/telegram', () => ({
-  getWebhookInfo: vi.fn(),
-}));
-
 import {
   WEBHOOK_CACHE_TTL_MS,
-  __resetWebhookStatusCache,
+  createGetWebhookStatus,
   getExpectedWebhookUrl,
-  getWebhookStatus,
-} from '@/lib/panel/webhook-status';
-import { getWebhookInfo } from '@/lib/telegram';
+} from '@/application/panel/webhook-status';
+
+import { buildClockStub, buildTelegramStub } from '../_helpers/dispatcher-stubs';
 
 const okWebhookInfo = (url: string) => ({
   ok: true as const,
   result: {
     url,
-    has_custom_certificate: false,
     pending_update_count: 0,
   },
-});
-
-beforeEach(() => {
-  __resetWebhookStatusCache();
-  vi.mocked(getWebhookInfo).mockReset();
-});
-
-afterEach(() => {
-  __resetWebhookStatusCache();
 });
 
 describe('AC-3.7.6 — getExpectedWebhookUrl from AUTH_URL', () => {
@@ -85,9 +72,12 @@ describe('AC-3.7.6 — getExpectedWebhookUrl from AUTH_URL', () => {
 
 describe('AC-3.7.6 — verde branch (ok + url matches expected)', () => {
   test('returns ok:true with the matching url', async () => {
-    vi.mocked(getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
+    const { clock } = buildClockStub(1_700_000_000_000);
+    const statusFn = createGetWebhookStatus({ telegram, clock });
 
-    const status = await getWebhookStatus();
+    const status = await statusFn();
 
     expect(status.ok).toBe(true);
     expect(status.url).toBe(getExpectedWebhookUrl());
@@ -97,13 +87,12 @@ describe('AC-3.7.6 — verde branch (ok + url matches expected)', () => {
 
 describe('AC-3.7.6 — rojo branches (RPC fail OR url mismatch)', () => {
   test('returns ok:false when getWebhookInfo returns ok=false', async () => {
-    vi.mocked(getWebhookInfo).mockResolvedValue({
-      ok: false,
-      error_code: 502,
-      description: 'Bad gateway',
-    });
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue({ ok: false });
+    const { clock } = buildClockStub(1_700_000_000_000);
+    const statusFn = createGetWebhookStatus({ telegram, clock });
 
-    const status = await getWebhookStatus();
+    const status = await statusFn();
 
     expect(status.ok).toBe(false);
     // No URL is reported when the RPC fails — caller must not display a
@@ -115,11 +104,14 @@ describe('AC-3.7.6 — rojo branches (RPC fail OR url mismatch)', () => {
     // Plausible regression: webhook was rebound to an attacker-controlled
     // origin (or a stale ngrok URL from dev). The helper MUST surface this
     // as rojo even though the RPC succeeded.
-    vi.mocked(getWebhookInfo).mockResolvedValue(
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue(
       okWebhookInfo('https://attacker.example/api/telegram/webhook'),
     );
+    const { clock } = buildClockStub(1_700_000_000_000);
+    const statusFn = createGetWebhookStatus({ telegram, clock });
 
-    const status = await getWebhookStatus();
+    const status = await statusFn();
 
     expect(status.ok).toBe(false);
     // The actual url IS captured so a tooltip can surface "actual vs
@@ -128,45 +120,48 @@ describe('AC-3.7.6 — rojo branches (RPC fail OR url mismatch)', () => {
   });
 
   test('returns ok:false when url is the expected origin but a different path', async () => {
-    vi.mocked(getWebhookInfo).mockResolvedValue(
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue(
       okWebhookInfo('https://astrologiadeluz.test/different-path'),
     );
+    const { clock } = buildClockStub(1_700_000_000_000);
+    const statusFn = createGetWebhookStatus({ telegram, clock });
 
-    const status = await getWebhookStatus();
+    const status = await statusFn();
 
     expect(status.ok).toBe(false);
   });
 });
 
-describe('AC-3.7.6 — 5-minute in-process cache', () => {
+describe('AC-3.7.6 — 5-minute in-process cache (per-factory-instance)', () => {
   test('second call within the TTL window does NOT invoke getWebhookInfo again', async () => {
-    vi.mocked(getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
+    const { clock } = buildClockStub(1_700_000_000_000);
+    const statusFn = createGetWebhookStatus({ telegram, clock });
 
-    const t0 = 1_700_000_000_000;
-    const now = () => t0;
+    await statusFn();
+    await statusFn();
+    await statusFn();
 
-    await getWebhookStatus(now);
-    await getWebhookStatus(now);
-    await getWebhookStatus(now);
-
-    expect(vi.mocked(getWebhookInfo)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(telegram.getWebhookInfo)).toHaveBeenCalledTimes(1);
   });
 
   test('call after the TTL window invokes getWebhookInfo a second time', async () => {
-    vi.mocked(getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
-
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
     const t0 = 1_700_000_000_000;
-    let t = t0;
-    const now = () => t;
+    const { clock, setTime } = buildClockStub(t0);
+    const statusFn = createGetWebhookStatus({ telegram, clock });
 
-    await getWebhookStatus(now);
-    expect(vi.mocked(getWebhookInfo)).toHaveBeenCalledTimes(1);
+    await statusFn();
+    expect(vi.mocked(telegram.getWebhookInfo)).toHaveBeenCalledTimes(1);
 
     // Step time just past the TTL boundary.
-    t = t0 + WEBHOOK_CACHE_TTL_MS + 1;
-    await getWebhookStatus(now);
+    setTime(t0 + WEBHOOK_CACHE_TTL_MS + 1);
+    await statusFn();
 
-    expect(vi.mocked(getWebhookInfo)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(telegram.getWebhookInfo)).toHaveBeenCalledTimes(2);
   });
 
   test('the cache spans the verde→rojo transition (TTL has not expired)', async () => {
@@ -174,34 +169,43 @@ describe('AC-3.7.6 — 5-minute in-process cache', () => {
     // but the cached verde MUST persist until the TTL elapses (matches the
     // "cached in-memory for 5 minutes" spec). Without this property the dot
     // would flicker on every page render under transient RPC failures.
-    vi.mocked(getWebhookInfo).mockResolvedValueOnce(okWebhookInfo(getExpectedWebhookUrl()));
-
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValueOnce(
+      okWebhookInfo(getExpectedWebhookUrl()),
+    );
     const t0 = 1_700_000_000_000;
-    const now = () => t0 + WEBHOOK_CACHE_TTL_MS - 1; // still inside the window
+    const { clock, setTime } = buildClockStub(t0);
+    const statusFn = createGetWebhookStatus({ telegram, clock });
 
-    const first = await getWebhookStatus(() => t0);
+    const first = await statusFn();
     expect(first.ok).toBe(true);
 
     // Subsequent rejection NEVER fires because the cache short-circuits.
-    vi.mocked(getWebhookInfo).mockResolvedValue({
-      ok: false,
-      description: 'should not be called',
-    });
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue({ ok: false });
+    setTime(t0 + WEBHOOK_CACHE_TTL_MS - 1); // still inside the window
 
-    const second = await getWebhookStatus(now);
+    const second = await statusFn();
     expect(second.ok).toBe(true);
     expect(second.checkedAt).toBe(t0); // same slot, NOT re-fetched
-    expect(vi.mocked(getWebhookInfo)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(telegram.getWebhookInfo)).toHaveBeenCalledTimes(1);
   });
 
-  test('__resetWebhookStatusCache forces a fresh fetch (test escape hatch)', async () => {
-    vi.mocked(getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
+  test('a fresh factory instance starts with an empty cache (per-instance isolation)', async () => {
+    // Path A replacement for the old `__resetWebhookStatusCache` escape
+    // hatch: each `createGetWebhookStatus` call closes over its own cache,
+    // so building a new instance is the canonical way to start fresh. Two
+    // instances over the SAME telegram stub each fetch once → 2 calls total.
+    const telegram = buildTelegramStub();
+    vi.mocked(telegram.getWebhookInfo).mockResolvedValue(okWebhookInfo(getExpectedWebhookUrl()));
+    const { clock } = buildClockStub(1_700_000_000_000);
 
-    await getWebhookStatus();
-    __resetWebhookStatusCache();
-    await getWebhookStatus();
+    const firstInstance = createGetWebhookStatus({ telegram, clock });
+    await firstInstance();
+    expect(vi.mocked(telegram.getWebhookInfo)).toHaveBeenCalledTimes(1);
 
-    expect(vi.mocked(getWebhookInfo)).toHaveBeenCalledTimes(2);
+    const secondInstance = createGetWebhookStatus({ telegram, clock });
+    await secondInstance();
+    expect(vi.mocked(telegram.getWebhookInfo)).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -210,7 +214,7 @@ describe('AC-3.7.6 — status helper integrates with CONTENT_PANEL.STATUS slots'
     // Direct integration with the consumer surface (the layout's color
     // dispatch). The verde slot's color === verde + tooltip contains the
     // {checkedAt} placeholder — both must hold across edits.
-    const { CONTENT_PANEL } = await import('@/lib/content');
+    const { CONTENT_PANEL } = await import('@/infrastructure/content');
     expect(CONTENT_PANEL.STATUS.webhook_ok.color).toBe('verde');
     expect(CONTENT_PANEL.STATUS.webhook_broken.color).toBe('rojo');
     expect(CONTENT_PANEL.STATUS.webhook_ok.tooltipTemplate).toContain('{checkedAt}');

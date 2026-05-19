@@ -7,12 +7,29 @@
   },
   "files": {
     "ignoreUnknown": true,
+    "include": [
+      "app/**",
+      "components/**",
+      "db/**",
+      "lib/**",
+      "scripts/**",
+      "src/**",
+      "tests/**",
+      "tools/**",
+      "*.json",
+      "*.jsonc",
+      "*.ts",
+      "*.tsx",
+      "*.js",
+      "*.cjs",
+      "*.mjs"
+    ],
     "ignore": [
       "node_modules",
       ".next",
       "playwright-report",
       "test-results",
-      "db/migrations",
+      "src/infrastructure/db/migrations",
       "TEMPORARY_ARCHIVE",
       ".context",
       "tools/scripts/probes/_TEMPLATE.cjs"

@@ -17,7 +17,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 
-import { type EventKind, idempotencyKey } from '@/lib/resend';
+import { type EventKind, idempotencyKey } from '@/infrastructure/email/resend';
 
 const EVENT_KINDS: EventKind[] = [
   'visitor_receipt',

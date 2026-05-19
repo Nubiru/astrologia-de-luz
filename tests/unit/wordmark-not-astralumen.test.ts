@@ -5,7 +5,7 @@
  *   - AC-1.1.5: hero copy rendered from CONTENT_PUBLIC.HOME.hero.* (not
  *     hard-coded). Verified structurally: the Hero source MUST import
  *     CONTENT_PUBLIC and reference its hero slots; the hero-copy literals
- *     MUST NOT appear in the Hero source (only in lib/content/public.ts).
+ *     MUST NOT appear in the Hero source (only in src/infrastructure/content/public.ts).
  *   - AC-1.1.6: Hero contains EXACTLY ONE <h1>; the eyebrow wordmark renders
  *     as <p>/<div> NOT <h1> (heading hierarchy per O-6 §6).
  *   - AC-1.1.7: wordmark literal is "ASTROLOGIA DE LUZ" (uppercase, regular
@@ -25,11 +25,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
 import { Hero } from '@/components/sections/Hero';
-import { CONTENT_PUBLIC } from '@/lib/content/public';
+import { CONTENT_PUBLIC } from '@/infrastructure/content/public';
 
 const ROOT = resolve(__dirname, '..', '..');
-const heroSrc = () => readFileSync(resolve(ROOT, 'components/sections/Hero.tsx'), 'utf8');
-const publicSrc = () => readFileSync(resolve(ROOT, 'lib/content/public.ts'), 'utf8');
+const heroSrc = () => readFileSync(resolve(ROOT, 'src/components/sections/Hero.tsx'), 'utf8');
+const publicSrc = () => readFileSync(resolve(ROOT, 'src/infrastructure/content/public.ts'), 'utf8');
 
 describe('G_A-4 wordmark literal — AC-1.1.7', () => {
   test('CONTENT_PUBLIC.HOME.hero.eyebrow equals "ASTROLOGIA DE LUZ" verbatim', () => {
@@ -75,9 +75,9 @@ describe('G_A-4 wordmark literal — AC-1.1.7', () => {
 });
 
 describe('G_A-4 slot-driven Hero render — AC-1.1.5', () => {
-  test('Hero source imports CONTENT_PUBLIC from lib/content/public', () => {
+  test('Hero source imports CONTENT_PUBLIC from infrastructure/content/public (post-G_C-35 cleanup-CP)', () => {
     expect(heroSrc()).toMatch(
-      /import\s*\{[^}]*CONTENT_PUBLIC[^}]*\}\s*from\s*['"][^'"]*lib\/content\/public['"]/,
+      /import\s*\{[^}]*CONTENT_PUBLIC[^}]*\}\s*from\s*['"][^'"]*infrastructure\/content\/public['"]/,
     );
   });
 
@@ -87,7 +87,7 @@ describe('G_A-4 slot-driven Hero render — AC-1.1.5', () => {
 
   test('Hero source contains NO hero-copy literals (rules out hard-coded copy)', () => {
     const src = heroSrc();
-    // The seeded H1 / sub / cta strings only live in lib/content/public.ts.
+    // The seeded H1 / sub / cta strings only live in src/infrastructure/content/public.ts.
     // If Hero hard-codes them, replacing the slot value would NOT re-render
     // the new copy — AC-1.1.5 would silently regress.
     expect(src).not.toContain(CONTENT_PUBLIC.HOME.hero.h1);

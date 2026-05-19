@@ -63,14 +63,17 @@ const splitStatements = (raw: string): string[] =>
 
 type RouteGET = () => Promise<Response>;
 let routeGET: RouteGET;
-let dbClient: ReturnType<typeof import('@/db/client')['getClient']>;
+let dbClient: ReturnType<typeof import('@/infrastructure/db/client')['getClient']>;
 
 beforeAll(async () => {
-  const dbMod = await import('@/db/client');
+  const dbMod = await import('@/infrastructure/db/client');
   dbClient = dbMod.getClient();
   await dbClient.execute('PRAGMA foreign_keys = ON');
   for (const file of MIGRATION_FILES) {
-    const raw = readFileSync(resolve(REPO_ROOT, 'db', 'migrations', file), 'utf8');
+    const raw = readFileSync(
+      resolve(REPO_ROOT, 'src', 'infrastructure', 'db', 'migrations', file),
+      'utf8',
+    );
     const sql =
       file === '0003_seed_augusto.sql' ? renderSeed(raw, 'augusto@astrologiadeluz.com') : raw;
     for (const stmt of splitStatements(sql)) {

@@ -21,7 +21,7 @@ import { describe, expect, test } from 'vitest';
 
 import HomePage from '@/app/page';
 import { Sobre } from '@/components/sections/Sobre';
-import { CONTENT_PUBLIC } from '@/lib/content/public';
+import { CONTENT_PUBLIC } from '@/infrastructure/content/public';
 
 const sobreHtml = renderToStaticMarkup(React.createElement(Sobre));
 const homeHtml = renderToStaticMarkup(React.createElement(HomePage));

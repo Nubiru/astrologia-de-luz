@@ -40,7 +40,7 @@ const fx = vi.hoisted(() => ({
   dispatchCalls: [] as Array<{ from: string; to: string; sessionId: string }>,
 }));
 
-vi.mock('@/lib/env', () => ({
+vi.mock('@/infrastructure/env', () => ({
   getEnv: () => ({
     ADMIN_EMAILS: 'admin@allowed.test',
     TELEGRAM_BOT_TOKEN: '0000:test-token',
@@ -49,11 +49,11 @@ vi.mock('@/lib/env', () => ({
   }),
 }));
 
-vi.mock('@/auth', () => ({
+vi.mock('@/infrastructure/auth/config', () => ({
   auth: vi.fn(async () => fx.authResult),
 }));
 
-vi.mock('@/lib/notify/dispatch-transition', async () => {
+vi.mock('@/application/notify/dispatch-transition', async () => {
   // Keep the type-only re-export shape intact for the route file's `type
   // SessionStatus` import. The runtime stub replaces `dispatchTransition`
   // with a vi.fn that records call args + returns a no-op result.
@@ -77,13 +77,13 @@ vi.mock('@/lib/notify/dispatch-transition', async () => {
 // The dispatcher stub above intercepts the only @/lib/notify path the route
 // reaches. Telegram / Resend mocks are NOT load-bearing here, but stubbing
 // them keeps the module graph deterministic.
-vi.mock('@/lib/telegram', () => ({
+vi.mock('@/infrastructure/telegram/client', () => ({
   sendMessage: vi.fn(async () => ({
     ok: true as const,
     result: { message_id: 1, chat: { id: 1 } },
   })),
 }));
-vi.mock('@/lib/resend', () => ({
+vi.mock('@/infrastructure/email/resend', () => ({
   sendEmail: vi.fn(async () => ({ data: { id: 'mock' }, error: null })),
   idempotencyKey: vi.fn(
     (i: { sessionId: string; eventKind: string; attempt: number }) =>
@@ -91,11 +91,11 @@ vi.mock('@/lib/resend', () => ({
   ),
 }));
 
-import { type Teacher, sessions } from '@/db/schema';
+import { type Teacher, sessions } from '@/infrastructure/db/schema';
 import { runMigrations } from '../../scripts/migrate';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 
 const ALL_STATUSES: readonly FxStatus[] = [
   'pending',
@@ -197,7 +197,7 @@ describe('G_C-11 — 6×6 transition matrix (AC-2.2.4 + AC-3.4.3)', () => {
     f = await makeFixture();
     augusto = await loadAugusto(f.client);
 
-    const dbClientMod = await import('@/db/client');
+    const dbClientMod = await import('@/infrastructure/db/client');
     vi.spyOn(dbClientMod, 'getDb').mockReturnValue(
       f.db as unknown as ReturnType<typeof dbClientMod.getDb>,
     );

@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
-import * as content from '@/lib/content';
+import * as content from '@/infrastructure/content';
 
 const ROOT = resolve(__dirname, '..', '..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
@@ -109,9 +109,9 @@ describe('G_C-1 toolchain foundation', () => {
       expect(ts.compilerOptions?.strict).toBe(true);
     });
 
-    test('@/* path alias maps to repo root', () => {
+    test('@/* path alias maps to ./src/* (post-G_C-35 cleanup-CP — was ./* during waves 1-4)', () => {
       const paths = ts.compilerOptions?.paths as Record<string, string[]> | undefined;
-      expect(paths?.['@/*']).toEqual(['./*']);
+      expect(paths?.['@/*']).toEqual(['./src/*']);
     });
 
     test('Next.js TS plugin is wired', () => {

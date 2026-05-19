@@ -3,7 +3,7 @@
  *
  * Verifies the foundation pieces that anchor every later pool-a page:
  *   - The 8 palette HEX values from IDENTITY.md "Brand visual system" are
- *     declared as Tailwind 4 @theme tokens in app/globals.css.
+ *     declared as Tailwind 4 @theme tokens in src/app/globals.css.
  *   - The 3 brand fonts (Cinzel / Cormorant Garamond / Jost) are loaded
  *     through next/font/google with display: 'swap' (AC-1.1.8 no FOIT > 100ms).
  *   - The prefers-reduced-motion @media wrapper is present and neutralizes
@@ -42,8 +42,8 @@ const FONTS = [
 ] as const;
 
 describe('G_A-1 brand-shell tokens', () => {
-  describe('app/globals.css — Tailwind 4 entry point', () => {
-    const css = read('app/globals.css');
+  describe('src/app/globals.css — Tailwind 4 entry point', () => {
+    const css = read('src/app/globals.css');
 
     test('imports the Tailwind 4 CSS engine', () => {
       expect(css).toMatch(/@import\s+["']tailwindcss["']/);
@@ -54,8 +54,8 @@ describe('G_A-1 brand-shell tokens', () => {
     });
   });
 
-  describe('app/globals.css — palette @theme tokens (IDENTITY.md)', () => {
-    const css = read('app/globals.css');
+  describe('src/app/globals.css — palette @theme tokens (IDENTITY.md)', () => {
+    const css = read('src/app/globals.css');
 
     test.each(PALETTE)('--color-$name resolves to $hex', ({ name, hex }) => {
       const re = new RegExp(`--color-${name}\\s*:\\s*${hex}\\s*;`, 'i');
@@ -68,8 +68,8 @@ describe('G_A-1 brand-shell tokens', () => {
     });
   });
 
-  describe('app/globals.css — font CSS variable wiring', () => {
-    const css = read('app/globals.css');
+  describe('src/app/globals.css — font CSS variable wiring', () => {
+    const css = read('src/app/globals.css');
 
     test.each(FONTS)('font alias references $cssVar', ({ cssVar }) => {
       expect(css).toContain(cssVar);
@@ -82,8 +82,8 @@ describe('G_A-1 brand-shell tokens', () => {
     });
   });
 
-  describe('app/globals.css — prefers-reduced-motion @media wrapper (AC-1.7.5)', () => {
-    const css = read('app/globals.css');
+  describe('src/app/globals.css — prefers-reduced-motion @media wrapper (AC-1.7.5)', () => {
+    const css = read('src/app/globals.css');
 
     test('declares @media (prefers-reduced-motion: reduce) block', () => {
       expect(css).toMatch(/@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*\{/);
@@ -99,8 +99,8 @@ describe('G_A-1 brand-shell tokens', () => {
     });
   });
 
-  describe('app/fonts.ts — next/font/google loaders (AC-1.1.8)', () => {
-    const fonts = read('app/fonts.ts');
+  describe('src/app/fonts.ts — next/font/google loaders (AC-1.1.8)', () => {
+    const fonts = read('src/app/fonts.ts');
 
     test('imports from next/font/google', () => {
       expect(fonts).toMatch(/from\s+['"]next\/font\/google['"]/);

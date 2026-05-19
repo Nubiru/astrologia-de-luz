@@ -130,13 +130,17 @@ describe('gamma.md Hard-Learned Lessons — anchor liveness', () => {
   });
 
   describe('Lesson 6 — Auth.js v5 anti-enumeration mechanism', () => {
-    test('auth.ts exists at repo root', () => {
-      expect(exists('auth.ts')).toBe(true);
+    test('auth wiring lives at src/infrastructure/auth/config.ts (G_C-29 moved from repo-root auth.ts)', () => {
+      // Pre-move (G_B-1 baseline): auth.ts at repo root.
+      // Post-move (G_C-29 W4-2 + G_C-35 cleanup-CP): src/infrastructure/auth/config.ts
+      // is the single source of truth; the transitional repo-root barrel + the
+      // @/auth tsconfig alias retired at G_C-35.
+      expect(exists('src/infrastructure/auth/config.ts')).toBe(true);
     });
 
     test('auth.ts wires pages.verifyRequest to a project-owned route', () => {
-      const authTs = read('auth.ts');
-      expect(authTs).toMatch(/verifyRequest/);
+      const authConfig = read('src/infrastructure/auth/config.ts');
+      expect(authConfig).toMatch(/verifyRequest/);
     });
   });
 
@@ -160,8 +164,11 @@ describe('gamma.md Hard-Learned Lessons — anchor liveness', () => {
   });
 
   describe('Lesson 9 — Foundational scaffolding (db/client.ts empirical anchor)', () => {
-    test('db/client.ts exists (authored by G_B-1)', () => {
-      expect(exists('db/client.ts')).toBe(true);
+    test('db/client.ts exists (authored by G_B-1; moved to src/infrastructure/ at G_C-27)', () => {
+      // G_C-27 W4-2 migration moved db/client.ts → src/infrastructure/db/client.ts.
+      // The Lesson 9 anchor still cites G_B-1's authorship of `db/client.ts` (the
+      // historical fact); this test asserts file presence at the CURRENT path.
+      expect(exists('src/infrastructure/db/client.ts')).toBe(true);
     });
 
     test('Lesson 9 cites G_B-1 + db/client.ts in the empirical anchor block', () => {

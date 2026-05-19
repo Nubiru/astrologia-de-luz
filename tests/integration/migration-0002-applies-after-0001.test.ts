@@ -1,5 +1,5 @@
 /**
- * G_C-2b integration pairing — apply `db/migrations/0000_init.sql` →
+ * G_C-2b integration pairing — apply `src/infrastructure/db/migrations/0000_init.sql` →
  * `0001_authjs.sql` → `0002_cp3_tables.sql` in order against an in-memory
  * libSQL database and exercise the load-bearing constraints end-to-end.
  *
@@ -28,7 +28,7 @@ import { resolve } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
-const MIGRATIONS_DIR = resolve(__dirname, '..', '..', 'db', 'migrations');
+const MIGRATIONS_DIR = resolve(__dirname, '..', '..', 'src', 'infrastructure', 'db', 'migrations');
 const read = (name: string) => readFileSync(resolve(MIGRATIONS_DIR, name), 'utf8');
 
 const ORDERED_MIGRATIONS = ['0000_init.sql', '0001_authjs.sql', '0002_cp3_tables.sql'];

@@ -1,17 +1,35 @@
 /**
- * G_C-15 pairing — manual "Reenviar" — success path (AC-3.3.5).
+ * G_C-15 / G_C-45 integration pairing — manual "Reenviar" success path
+ * (AC-3.3.4 + AC-3.3.5) + 401 panel-gate + 404 missing-log.
  *
- * Exercises the load-bearing happy-path of the AC-3.3.5 retry endpoint:
+ * G_C-45 refactor (M-20 / D-056, pilot 8/N — concern D.1, NEW Path A
+ * variant): composition-level injection. Concerns A–C (G_C-38..G_C-44)
+ * called the use-case factories directly (createDispatchPending /
+ * createGetWebhookStatus / createGetBrandOwner). Concern D tests the
+ * FULL ROUTE HANDLER — `POST /api/notify/[id]/retry` — which (a) auth-
+ * gates via NextAuth, (b) calls `retryFailed` default-instance which (c)
+ * calls `getComposition() → getDb()` to access ports. The route handler
+ * is what is under test; the composition is the integration seam.
  *
- *   1. A prior failed `notify_log` row exists (the listing page's source).
- *   2. POST `/api/notify/[id]/retry` with a valid auth session.
- *   3. Dispatcher (mocked at the `@/lib/resend` boundary) returns 2xx.
- *   4. Handler INSERTs a new `notify_log` row with
- *      `attempt_number = prior + 1` AND `status` in the 2xx range.
- *   5. Response: 200 + `kind: 'retry_ok'` + Spanish toast
- *      `CONTENT_PANEL.NOTIFY.reenviar_success_toast`.
+ * Pattern: `vi.spyOn(compositionMod, 'getComposition').mockReturnValue(
+ * testComposition)`. The test composition uses REAL repositories
+ * (makeSessionsRepository / makeMaestrosRepository / makeNotifyLogRepository)
+ * wrapping the in-memory libSQL fixture so trail-row assertions stay
+ * byte-identical. Only the side-effect ports (emailSender / telegram) are
+ * stubbed — preserving the failure-only telemetry invariant (AC-3.3.1).
  *
- * These assertions FAIL when:
+ * Why this is the right Path A variant for route tests (not a violation
+ * of "no vi.mock of composition"): the production layer-up rule is "tests
+ * do not reach into infrastructure module state via vi.mock". The
+ * composition root IS the seam where production wiring is decided; for
+ * route-handler integration tests, replacing the composition is the
+ * canonical way to swap concrete adapters without touching infrastructure
+ * modules. The integration test still exercises real SQL via the REAL
+ * repositories — `vi.mock` only remains on `@/infrastructure/auth/config`,
+ * which IS the route's auth seam (mocking it is canonical for testing
+ * auth-gated handlers).
+ *
+ * What this catches:
  *   - The auth gate is dropped and unauthenticated callers reach the
  *     handler (regression on AC-3.3.5 panel-authed contract).
  *   - The attempt_number bump is misscoped (e.g. scoped to session_id
@@ -34,69 +52,33 @@ import { type LibSQLDatabase, drizzle } from 'drizzle-orm/libsql';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+import {
+  type EmailSenderStub,
+  type TelegramBotStub,
+  buildEmailSenderStub,
+  buildTelegramStub,
+  buildTestComposition,
+  installTestComposition,
+} from '../_helpers/dispatcher-stubs';
+
 const fx = vi.hoisted(() => ({
-  emailCalls: [] as Array<{
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
-    sessionId: string;
-    eventKind: string;
-    attempt: number;
-  }>,
   authResult: { user: { email: 'admin@astrologiadeluz.com' } } as {
     user: { email: string };
   } | null,
 }));
 
-vi.mock('@/lib/env', () => ({
-  getEnv: () => ({
-    ADMIN_EMAILS: 'augusto@astrologiadeluz.com',
-    TELEGRAM_BOT_TOKEN: '0000:test-token',
-    AUTH_RESEND_KEY: 're_test',
-    RESEND_FROM: 'no-reply@astrologiadeluz.com',
-  }),
-}));
-
-vi.mock('@/auth', () => ({
+// Auth-gate is the route's integration seam — keep mocked so the 401 path
+// (AC-3.3.5 panel-authed contract) is exercised end-to-end.
+vi.mock('@/infrastructure/auth/config', () => ({
   auth: vi.fn(async () => fx.authResult),
 }));
 
-vi.mock('@/lib/resend', () => ({
-  sendEmail: vi.fn(
-    async (input: {
-      to: string;
-      subject: string;
-      html: string;
-      text: string;
-      sessionId: string;
-      eventKind: string;
-      attempt: number;
-    }) => {
-      fx.emailCalls.push(input);
-      return { data: { id: `mock-${fx.emailCalls.length}` }, error: null };
-    },
-  ),
-  idempotencyKey: vi.fn(
-    (i: { sessionId: string; eventKind: string; attempt: number }) =>
-      `mock-${i.sessionId}:${i.eventKind}:${i.attempt}`,
-  ),
-}));
-
-// Telegram is not exercised in this file, but the production route imports
-// it transitively — mocking keeps the module load deterministic.
-vi.mock('@/lib/telegram', () => ({
-  sendMessage: vi.fn(async () => ({
-    ok: true as const,
-    result: { message_id: 1, chat: { id: 1 } },
-  })),
-}));
-
-import { type Session, type Teacher, notifyLog, sessions } from '@/db/schema';
+import { type Session, type Teacher, notifyLog, sessions } from '@/infrastructure/db/schema';
+import * as schema from '@/infrastructure/db/schema';
 import { runMigrations } from '../../scripts/migrate';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 const REF_NOW = 1_779_789_600_000;
 const AUGUSTO_CHAT_ID = '999111222';
 const LOG_ID = 'log-orig-1';
@@ -104,7 +86,7 @@ const LOG_ID = 'log-orig-1';
 type Fixture = {
   workdir: string;
   client: Client;
-  db: LibSQLDatabase<Record<string, never>>;
+  db: LibSQLDatabase<typeof schema>;
 };
 
 async function makeFixture(): Promise<Fixture> {
@@ -112,7 +94,7 @@ async function makeFixture(): Promise<Fixture> {
   const dbPath = join(workdir, 'test.db');
   closeSync(openSync(dbPath, 'w'));
   const client = createClient({ url: `file:${dbPath}` });
-  const db = drizzle(client) as LibSQLDatabase<Record<string, never>>;
+  const db = drizzle(client, { schema });
   await runMigrations(db, 'augusto@astrologiadeluz.com', MIGRATIONS);
   return { workdir, client, db };
 }
@@ -138,7 +120,7 @@ async function loadAugusto(client: Client): Promise<Teacher> {
 }
 
 async function insertPendingSession(
-  db: LibSQLDatabase<Record<string, never>>,
+  db: LibSQLDatabase<typeof schema>,
   augusto: Teacher,
 ): Promise<Session> {
   const inserted = await db
@@ -165,7 +147,7 @@ async function insertPendingSession(
 }
 
 async function insertFailedLog(
-  db: LibSQLDatabase<Record<string, never>>,
+  db: LibSQLDatabase<typeof schema>,
   sessionId: string,
 ): Promise<void> {
   await db.insert(notifyLog).values({
@@ -193,9 +175,29 @@ describe('G_C-15 — manual Reenviar success path (AC-3.3.5)', () => {
   let f: Fixture;
   let augusto: Teacher;
   let session: Session;
+  let emailSender: EmailSenderStub;
+  let telegram: TelegramBotStub;
 
   beforeEach(async () => {
-    fx.emailCalls.length = 0;
+    // The REAL maestros.repository.findBrandOwner() reads
+    // `getEnv().ADMIN_EMAILS` to resolve the brand-owner row. Composition
+    // injection bypasses every adapter the production composition factory
+    // creates (emailSender / telegram / rateLimit / etc.), but the REAL
+    // repository inside testComposition still reaches env at invocation
+    // time. Set the values directly — mirrors the pattern used by
+    // tests/unit/composition-wiring.test.ts. The legacy
+    // `vi.mock('@/infrastructure/env')` is no longer required.
+    process.env.TURSO_DATABASE_URL = 'file::memory:?cache=shared';
+    process.env.TURSO_AUTH_TOKEN = 'manual-reenviar-ok-fixture';
+    process.env.AUTH_SECRET = 'a'.repeat(48);
+    process.env.AUTH_URL = 'http://localhost:3000';
+    process.env.AUTH_RESEND_KEY = 're_manual_reenviar_ok_fixture';
+    process.env.RESEND_FROM = 'Astrologia de Luz <no-reply@manual-reenviar.test>';
+    process.env.ADMIN_EMAILS = 'augusto@astrologiadeluz.com';
+    process.env.TELEGRAM_BOT_TOKEN = '1:manual-reenviar-ok-fixture';
+    process.env.TELEGRAM_BOT_USERNAME = 'ManualReenviarOkBot';
+    process.env.TELEGRAM_WEBHOOK_SECRET = 'b'.repeat(48);
+
     fx.authResult = { user: { email: 'admin@astrologiadeluz.com' } };
     f = await makeFixture();
     await f.client.execute(
@@ -205,12 +207,18 @@ describe('G_C-15 — manual Reenviar success path (AC-3.3.5)', () => {
     session = await insertPendingSession(f.db, augusto);
     await insertFailedLog(f.db, session.id);
 
-    // Bind the production db handle to the in-memory test client (the route
-    // imports `getDb` from `@/db/client`; without this the handler would
-    // attach to whatever real connection the env vars point at).
-    const dbClientMod = await import('@/db/client');
-    vi.spyOn(dbClientMod, 'getDb').mockReturnValue(
-      f.db as unknown as ReturnType<typeof dbClientMod.getDb>,
+    // Build the test composition via the shared helper: REAL repositories
+    // over the in-memory DB (so trail-row assertions stay byte-identical
+    // with AC-3.3.5) + stubbed side-effect ports (so dispatch firings are
+    // recorded against `.calls` arrays).
+    emailSender = buildEmailSenderStub();
+    telegram = buildTelegramStub();
+    installTestComposition(
+      buildTestComposition(f.db, {
+        emailSender,
+        telegram,
+        clock: { now: () => new Date(REF_NOW) },
+      }),
     );
   });
 
@@ -239,15 +247,15 @@ describe('G_C-15 — manual Reenviar success path (AC-3.3.5)', () => {
   test('re-fires the same eventKind via dispatchEmail with attempt = prior + 1', async () => {
     await callRetry(LOG_ID);
 
-    expect(fx.emailCalls).toHaveLength(1);
-    expect(fx.emailCalls[0]?.to).toBe('visitante.retry@example.com');
-    expect(fx.emailCalls[0]?.eventKind).toBe('visitor_receipt');
-    expect(fx.emailCalls[0]?.attempt).toBe(2);
+    expect(emailSender.calls).toHaveLength(1);
+    expect(emailSender.calls[0]?.to).toBe('visitante.retry@example.com');
+    expect(emailSender.calls[0]?.eventKind).toBe('visitor_receipt');
+    expect(emailSender.calls[0]?.attempt).toBe(2);
     // Subject pulled from CONTENT_EMAIL.PUBLIC.visitorRequestReceived.
-    expect(fx.emailCalls[0]?.subject).toBe('Recibimos tu solicitud — Astrologia de Luz');
+    expect(emailSender.calls[0]?.subject).toBe('Recibimos tu solicitud — Astrologia de Luz');
     // Visitor + maestro vars interpolated.
-    expect(fx.emailCalls[0]?.text).toContain('Visitante Retry');
-    expect(fx.emailCalls[0]?.text).toContain(augusto.name);
+    expect(emailSender.calls[0]?.text).toContain('Visitante Retry');
+    expect(emailSender.calls[0]?.text).toContain(augusto.name);
   });
 
   test('inserts a NEW notify_log row with status 200 + attempt_number 2 (trail preserved)', async () => {
@@ -273,7 +281,7 @@ describe('G_C-15 — manual Reenviar success path (AC-3.3.5)', () => {
     const res = await callRetry(LOG_ID);
     expect(res.status).toBe(401);
     // No dispatch fires when the auth gate rejects.
-    expect(fx.emailCalls).toHaveLength(0);
+    expect(emailSender.calls).toHaveLength(0);
     // No log row written.
     const rows = await f.db.select().from(notifyLog);
     expect(rows).toHaveLength(1); // only the original failure
@@ -282,6 +290,6 @@ describe('G_C-15 — manual Reenviar success path (AC-3.3.5)', () => {
   test('returns 404 when the notify_log id does not exist', async () => {
     const res = await callRetry('does-not-exist');
     expect(res.status).toBe(404);
-    expect(fx.emailCalls).toHaveLength(0);
+    expect(emailSender.calls).toHaveLength(0);
   });
 });

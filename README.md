@@ -79,7 +79,47 @@ See `ADAPTING.md` for full per-domain skins.
 
 ---
 
-## Architecture overview
+## Project tree (post-wave-4 DDD restructure, 2026-05-21)
+
+The `src/` tree mirrors the DDD layers per S-2 §7.1.2. Wave-4 closed at G_C-36 with `npm run qa` GREEN end-to-end (lint + typecheck + 891/891 vitest + next build) + a 4-route smoke walk confirming the migration on the live production-mode server (`/`, `/reservar`, `/panel`, `/api/auth/csrf` all 200). The `tests/` folder stays at the repo root by design (Hook-CP1-2 / D-046).
+
+```
+astrologia-luz/
+├── src/
+│   ├── app/                            ← Next.js App Router (pages + route handlers)
+│   │   ├── api/                        ← REST endpoints (sessions, teachers, notify retry, Auth.js catch-all)
+│   │   ├── panel/                      ← admin surface (auth-gated)
+│   │   ├── reservar/                   ← public booking page
+│   │   └── page.tsx                    ← public landing
+│   ├── application/                    ← use cases (booking, notify, panel)
+│   │   ├── booking/                    ← crear-solicitud, aprobar-sesion, rechazar-sesion
+│   │   ├── notify/                     ← dispatch-pending, dispatch-transition, retry-failed
+│   │   └── panel/                      ← webhook-status, brand-owner
+│   ├── domain/                         ← ports + entities (no I/O; pure TS)
+│   │   ├── auth/   ├── booking/   ├── maestros/   └── notifications/
+│   ├── infrastructure/                 ← right-side adapters (Drizzle, Resend, Telegram, Auth.js)
+│   │   ├── auth/ allowlist.ts · config.ts
+│   │   ├── content/                    ← Spanish copy modules (CONTENT_EMAIL · CONTENT_PANEL · CONTENT_PUBLIC)
+│   │   ├── db/ client.ts · schema.ts · migrations/ · repositories/
+│   │   ├── email/resend.ts
+│   │   ├── env/index.ts                ← lazy getEnv() + parseEnv()
+│   │   ├── rate-limit/token-bucket.ts
+│   │   └── telegram/client.ts
+│   ├── main/composition.ts             ← single composition root (Cockburn Configurator)
+│   ├── components/                     ← brand · sections · reservar
+│   └── presentation/                   ← (reserved for further view-side layers)
+├── tests/                              ← Vitest specs (unit + integration) + Playwright e2e
+│   ├── _helpers/dispatcher-stubs.ts    ← shared port-stub builders (G_C-47)
+│   ├── ci/  ├── unit/  ├── integration/  └── e2e/
+├── scripts/migrate.ts                  ← Drizzle libsql migrator (postBuild hook + db:migrate npm script)
+└── tools/scripts/                      ← agentic-workflow helpers (claim, set-task-result, validators)
+```
+
+The agentic-workflow scaffold described below is the boilerplate this project is built on; the per-project state lives in `.context/` and is gitignored.
+
+---
+
+## Architecture overview (boilerplate scaffold)
 
 ```
 boilerplate-workflow/

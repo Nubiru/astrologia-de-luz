@@ -9,7 +9,7 @@
  *
  *  1. `drizzle.config.ts` shape — dialect / schema / out / dbCredentials env
  *     wiring. Would fail if a future contributor "simplifies" the file and
- *     drops the libsql dialect, or repoints out= away from `db/migrations/`
+ *     drops the libsql dialect, or repoints out= away from `src/infrastructure/db/migrations/`
  *     (silently breaking the migrate runner G_C-5 + every subsequent
  *     drizzle-kit invocation).
  *
@@ -26,13 +26,13 @@
  *
  *  4. **The zero-diff invariant itself** — running `drizzle-kit generate`
  *     against the current schema + meta/ produces "No schema changes" and
- *     does NOT add or modify any file under `db/migrations/`. Would fail
+ *     does NOT add or modify any file under `src/infrastructure/db/migrations/`. Would fail
  *     when `db/schema.ts` drifts from the snapshot — exactly the regression
  *     the spec calls out as "orphan schema-vs-migration drift."
  *
  * Self-healing: if drizzle-kit DOES emit a new .sql/snapshot/journal entry
  * during the zero-diff run (because the schema genuinely drifted), the
- * test's `finally` block restores `db/migrations/` to its pre-run state.
+ * test's `finally` block restores `src/infrastructure/db/migrations/` to its pre-run state.
  * The assertion still fails (which is the diagnostic signal we want), but
  * the developer's working tree is left pristine so a re-run after fixing
  * the drift is deterministic. The drift filenames are written to stderr
@@ -45,7 +45,7 @@ import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 const META = resolve(MIGRATIONS, 'meta');
 const DRIZZLE_KIT = resolve(ROOT, 'node_modules/.bin/drizzle-kit');
 const CONFIG = resolve(ROOT, 'drizzle.config.ts');
@@ -58,8 +58,8 @@ const AUTHORED_MIGRATIONS = [
 ] as const;
 
 /**
- * Recursively walk `db/migrations/` and return a content-addressed map.
- * Keys are paths relative to `db/migrations/`; values are file contents.
+ * Recursively walk `src/infrastructure/db/migrations/` and return a content-addressed map.
+ * Keys are paths relative to `src/infrastructure/db/migrations/`; values are file contents.
  * Used by the zero-diff test to detect added/modified files after running
  * `drizzle-kit generate` and to restore on assertion failure.
  */
@@ -108,12 +108,12 @@ describe('G_C-4 — drizzle-kit zero-diff CI gate (AC-2.3.1)', () => {
       expect(config).toMatch(/dialect:\s*['"]turso['"]/);
     });
 
-    test('schema input points at db/schema.ts', () => {
-      expect(config).toMatch(/schema:\s*['"]\.\/db\/schema\.ts['"]/);
+    test('schema input points at src/infrastructure/db/schema.ts (G_C-27 move)', () => {
+      expect(config).toMatch(/schema:\s*['"]\.\/src\/infrastructure\/db\/schema\.ts['"]/);
     });
 
-    test('migrations output points at db/migrations', () => {
-      expect(config).toMatch(/out:\s*['"]\.\/db\/migrations['"]/);
+    test('migrations output points at src/infrastructure/db/migrations (G_C-27 move)', () => {
+      expect(config).toMatch(/out:\s*['"]\.\/src\/infrastructure\/db\/migrations['"]/);
     });
 
     test('dbCredentials read TURSO_* env vars (for push/studio surface)', () => {
@@ -157,7 +157,7 @@ describe('G_C-4 — drizzle-kit zero-diff CI gate (AC-2.3.1)', () => {
   });
 
   describe('zero-diff invariant — generate against current state is a no-op', () => {
-    test('drizzle-kit generate reports "No schema changes" and leaves db/migrations/ unchanged', () => {
+    test('drizzle-kit generate reports "No schema changes" and leaves src/infrastructure/db/migrations/ unchanged', () => {
       const before = snapshotMigrations();
       let output = '';
       let drift: { added: string[]; modified: string[] } = {

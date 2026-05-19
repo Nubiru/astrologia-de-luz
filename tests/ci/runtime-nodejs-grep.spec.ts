@@ -3,7 +3,7 @@
  * `export const runtime = 'nodejs'` (AC-2.4.5).
  *
  * Auth.js v5's DrizzleAdapter pulls in @libsql/client, which is NOT Edge-safe
- * (node:crypto + native bindings). Any route under `app/api/auth/**` or
+ * (node:crypto + native bindings). Any route under `src/app/api/auth/**` or
  * `app/panel/**` that boots into Edge runtime would either:
  *   - fail at build with "Cannot use module X in Edge runtime", OR
  *   - succeed but throw at first DB call.
@@ -13,7 +13,7 @@
  * without the runtime declaration.
  *
  * Fails when:
- *   - A new file lands under `app/api/auth/**` or `app/panel/**` without the
+ *   - A new file lands under `src/app/api/auth/**` or `app/panel/**` without the
  *     literal `export const runtime = 'nodejs'` declaration anywhere in its
  *     source (catches both pure-missing AND typo'd `'node'` / `"nodejs"` with
  *     mismatched quote / spelling variants).
@@ -41,11 +41,11 @@ const REPO_ROOT = resolve(__dirname, '..', '..');
 // Prettier-style auto-fix to double quotes does NOT silently break the gate.
 const RUNTIME_DECLARATION = /export\s+const\s+runtime\s*=\s*['"]nodejs['"]/;
 
-// Files in these subtrees MUST declare Node runtime. The `app/panel/**` arm is
-// future-proofed: today the directory does not exist yet (G_B-3+ create it),
-// the walker simply returns [] in that case and the test stays green until a
-// page lands without the declaration.
-const RUNTIME_SCOPED_ROOTS = ['app/api/auth', 'app/panel'] as const;
+// Files in these subtrees MUST declare Node runtime. Both surfaces now live
+// under `src/app/` post-W4-4 (G_C-34a moved panel; api/auth moved earlier in
+// the wave). The walker silently returns [] for missing dirs so the gate
+// stays green across staggered moves.
+const RUNTIME_SCOPED_ROOTS = ['src/app/api/auth', 'src/app/panel'] as const;
 
 // Only route-handler / page files carry the runtime contract. Layouts +
 // loading + error + not-found also count — they execute on the server.
@@ -84,16 +84,16 @@ function collectRouteFiles(): { absolute: string; relative: string }[] {
 
 describe('AC-2.4.5 — runtime contract grep', () => {
   test('the catch-all Auth.js handler exists (G_B-2 anchor)', () => {
-    // Anchor assertion: if `app/api/auth/[...nextauth]/route.ts` ever
+    // Anchor assertion: if `src/app/api/auth/[...nextauth]/route.ts` ever
     // disappears, the runtime contract becomes vacuous (walker returns []).
     // This test fails LOUDLY in that case rather than silently passing.
     const files = collectRouteFiles();
     const authRouteHits = files.filter((f) =>
-      f.relative.replace(/\\/g, '/').startsWith('app/api/auth/'),
+      f.relative.replace(/\\/g, '/').startsWith('src/app/api/auth/'),
     );
     expect(
       authRouteHits.length,
-      `no route files found under app/api/auth/** — did the catch-all move? (collected files: ${files.map((f) => f.relative).join(', ') || '<none>'})`,
+      `no route files found under src/app/api/auth/** — did the catch-all move? (collected files: ${files.map((f) => f.relative).join(', ') || '<none>'})`,
     ).toBeGreaterThan(0);
   });
 
@@ -114,16 +114,16 @@ describe('AC-2.4.5 — runtime contract grep', () => {
 });
 
 describe('AC-2.4.6 — catch-all route file shape', () => {
-  test('the Auth.js catch-all re-exports handlers.GET + handlers.POST from `@/auth`', () => {
-    const routePath = resolve(REPO_ROOT, 'app/api/auth/[...nextauth]/route.ts');
+  test('the Auth.js catch-all re-exports handlers.GET + handlers.POST from `@/infrastructure/auth/config`', () => {
+    const routePath = resolve(REPO_ROOT, 'src/app/api/auth/[...nextauth]/route.ts');
     const source = readFileSync(routePath, 'utf8');
 
-    // Source-of-truth import: handlers comes from `@/auth` (the Auth.js v5
-    // wiring). If a future refactor swaps it for a hand-rolled handler, the
-    // file would compile but the byte-identical anti-enum behavior from G_B-1
-    // would silently regress because the test would now exercise a parallel
-    // codepath.
-    expect(source).toMatch(/from\s+['"]@\/auth['"]/);
+    // Source-of-truth import: handlers comes from `@/infrastructure/auth/config`
+    // (the Auth.js v5 wiring; was `@/auth` pre-G_C-35 cleanup-CP). If a future
+    // refactor swaps it for a hand-rolled handler, the file would compile but
+    // the byte-identical anti-enum behavior from G_B-1 would silently regress
+    // because the test would now exercise a parallel codepath.
+    expect(source).toMatch(/from\s+['"]@\/infrastructure\/auth\/config['"]/);
 
     // The two exports the App Router wants for a catch-all route. Accept
     // either explicit `export const GET / POST` or the `export const { GET,
@@ -135,7 +135,7 @@ describe('AC-2.4.6 — catch-all route file shape', () => {
 
 describe('AC-2.4.5 — proxy.ts matcher contract', () => {
   test('proxy.ts exports a config matcher covering /panel/* and /api/auth/*', () => {
-    const proxyPath = resolve(REPO_ROOT, 'proxy.ts');
+    const proxyPath = resolve(REPO_ROOT, 'src/proxy.ts');
     const source = readFileSync(proxyPath, 'utf8');
 
     // The matcher is a literal in the source — assert against the literal so

@@ -9,7 +9,7 @@
  *      is re-validated on the next `getEnv()`.
  *   3. NO production source file imports the old eager `env` symbol from
  *      `@/lib/env`. The grep asserts both the named-import form
- *      (`import { env } from '@/lib/env'`) and the rest-spread form
+ *      (`import { env } from '@/infrastructure/env'`) and the rest-spread form
  *      (`{ env, ... }`).
  *   4. Importing `@/lib/env` itself does NOT validate — only `getEnv()`
  *      calls it. This is the load-bearing invariant that closes the
@@ -35,7 +35,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { ENV_ERROR_HEADER, __resetEnvForTests, getEnv } from '@/lib/env';
+import { ENV_ERROR_HEADER, __resetEnvForTests, getEnv } from '@/infrastructure/env';
 
 const VALID = {
   TURSO_DATABASE_URL: 'libsql://astrologiadeluz-test.turso.io',
@@ -154,7 +154,7 @@ describe('lib/env getEnv — validation on access (AC-G_C-25.5)', () => {
     // whatever state the runner started in. Re-importing the module
     // (vitest module cache means this is a no-op rebind, which is fine —
     // the assertion is that import itself does not throw).
-    await expect(import('@/lib/env')).resolves.toBeDefined();
+    await expect(import('@/infrastructure/env')).resolves.toBeDefined();
     // No call to getEnv() — no validation should have fired.
     expect(stderrSpy).not.toHaveBeenCalled();
   });
@@ -167,7 +167,13 @@ describe('lib/env consumers — no eager `env` import remains (AC-G_C-25.3)', ()
     join(process.cwd(), 'db'),
     join(process.cwd(), 'scripts'),
   ];
-  const productionRootFiles = [join(process.cwd(), 'auth.ts'), join(process.cwd(), 'proxy.ts')];
+  // G_C-29 W4-2 moved auth.ts to src/infrastructure/auth/config.ts. G_C-34a
+  // W4-4 moved proxy.ts to src/proxy.ts. The list enumerates the lazy-getter-
+  // discipline production files NOT covered by productionGlobs.
+  const productionRootFiles = [
+    join(process.cwd(), 'src/infrastructure/auth/config.ts'),
+    join(process.cwd(), 'src/proxy.ts'),
+  ];
   const skipDirs = new Set(['node_modules', '.next', 'TEMPORARY_ARCHIVE', '.context']);
 
   function walk(dir: string): string[] {

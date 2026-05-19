@@ -1,5 +1,5 @@
 /**
- * G_C-2a integration pairing — apply `db/migrations/0000_init.sql` against an
+ * G_C-2a integration pairing — apply `src/infrastructure/db/migrations/0000_init.sql` against an
  * in-memory libSQL database and exercise the load-bearing constraints
  * end-to-end.
  *
@@ -28,7 +28,16 @@ import { resolve } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
-const MIGRATION_PATH = resolve(__dirname, '..', '..', 'db', 'migrations', '0000_init.sql');
+const MIGRATION_PATH = resolve(
+  __dirname,
+  '..',
+  '..',
+  'src',
+  'infrastructure',
+  'db',
+  'migrations',
+  '0000_init.sql',
+);
 const MIGRATION_SQL = readFileSync(MIGRATION_PATH, 'utf8');
 
 const splitStatements = (sql: string): string[] =>

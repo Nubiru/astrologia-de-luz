@@ -18,7 +18,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { resolveIp } from '@/lib/rate-limit';
+import { resolveIp } from '@/infrastructure/rate-limit/token-bucket';
 
 const h = (entries: Record<string, string>): Headers => new Headers(entries);
 

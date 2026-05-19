@@ -13,6 +13,16 @@
  * G_C-11 will already reject them with 409, but a future regression that
  * lets one through must NOT silently send an unexpected email.
  *
+ * G_C-44 refactor (M-20 / D-056, pilot 7/N, concern C.5 — last concern-C
+ * file): G_C-43's 4-port Path A playbook applied verbatim to the
+ * `dispatchTransition — end-to-end` describe block. The
+ * `emailDescriptorFor — pure mapping` describe stays UNCHANGED (pure
+ * function, no factory, no DB, no port — same exception G_C-39 made for
+ * brandOwnerEmail canonicalisation). Stub builders are copied
+ * byte-identical from tests/integration/visitor-email-failure-warning.test.ts
+ * (post-G_C-43); shared-helper extraction to tests/_helpers/dispatcher-stubs.ts
+ * is queued as a follow-up after concern D closes.
+ *
  * What this catches:
  *   - A new status is added to the enum but the dispatcher's switch is
  *     never widened — the unknown-pair test would flip false to true.
@@ -31,75 +41,34 @@ import { join, resolve } from 'node:path';
 
 import { type Client, createClient } from '@libsql/client';
 import { type LibSQLDatabase, drizzle } from 'drizzle-orm/libsql';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
-const fx = vi.hoisted(() => ({
-  tgCalls: [] as Array<{ chatId: string; text: string; parseMode?: string }>,
-  emailCalls: [] as Array<{
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
-    sessionId: string;
-    eventKind: string;
-    attempt: number;
-  }>,
-}));
-
-vi.mock('@/lib/env', () => ({
-  getEnv: () => ({
-    ADMIN_EMAILS: 'augusto@astrologiadeluz.com',
-    TELEGRAM_BOT_TOKEN: '0000:test-token',
-    AUTH_RESEND_KEY: 're_test',
-    RESEND_FROM: 'no-reply@astrologiadeluz.com',
-  }),
-}));
-
-vi.mock('@/lib/telegram', () => ({
-  sendMessage: vi.fn(async (input: { chatId: string; text: string; parseMode?: string }) => {
-    fx.tgCalls.push(input);
-    return { ok: true as const, result: { message_id: fx.tgCalls.length, chat: { id: 1 } } };
-  }),
-}));
-
-vi.mock('@/lib/resend', () => ({
-  sendEmail: vi.fn(
-    async (input: {
-      to: string;
-      subject: string;
-      html: string;
-      text: string;
-      sessionId: string;
-      eventKind: string;
-      attempt: number;
-    }) => {
-      fx.emailCalls.push(input);
-      return { data: { id: `mock-${fx.emailCalls.length}` }, error: null };
-    },
-  ),
-  idempotencyKey: vi.fn(
-    (input: { sessionId: string; eventKind: string; attempt: number }) =>
-      `mock-${input.sessionId}:${input.eventKind}:${input.attempt}`,
-  ),
-}));
-
-import { type Session, type Teacher, notifyLog, sessions } from '@/db/schema';
 import {
   type SessionStatus,
-  dispatchTransition,
+  createDispatchTransition,
   emailDescriptorFor,
-} from '@/lib/notify/dispatch-transition';
+} from '@/application/notify/dispatch-transition';
+import { makeNotifyLogRepository } from '@/infrastructure/db/repositories/notify-log.repository';
+import { type Session, type Teacher, notifyLog, sessions } from '@/infrastructure/db/schema';
+import * as schema from '@/infrastructure/db/schema';
 import { runMigrations } from '../../scripts/migrate';
+import {
+  type EmailSenderStub,
+  type TelegramBotStub,
+  buildEmailSenderStub,
+  buildMaestrosReaderStub,
+  buildTelegramStub,
+} from '../_helpers/dispatcher-stubs';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 const REF_NOW = 1_779_789_600_000;
 const AUGUSTO_CHAT_ID = '111222333';
 
 type Fixture = {
   workdir: string;
   client: Client;
-  db: LibSQLDatabase<Record<string, never>>;
+  db: LibSQLDatabase<typeof schema>;
 };
 
 async function makeFixture(): Promise<Fixture> {
@@ -107,7 +76,7 @@ async function makeFixture(): Promise<Fixture> {
   const dbPath = join(workdir, 'test.db');
   closeSync(openSync(dbPath, 'w'));
   const client = createClient({ url: `file:${dbPath}` });
-  const db = drizzle(client) as LibSQLDatabase<Record<string, never>>;
+  const db = drizzle(client, { schema });
   await runMigrations(db, 'augusto@astrologiadeluz.com', MIGRATIONS);
   await client.execute(
     `UPDATE teachers SET telegram_chat_id = '${AUGUSTO_CHAT_ID}' WHERE slug = 'augusto-rocha'`,
@@ -136,7 +105,7 @@ async function loadAugusto(client: Client): Promise<Teacher> {
 }
 
 async function insertSession(
-  db: LibSQLDatabase<Record<string, never>>,
+  db: LibSQLDatabase<typeof schema>,
   augusto: Teacher,
   id: string,
   status: SessionStatus,
@@ -217,8 +186,6 @@ describe('G_C-14 — transition email matrix (AC-3.4.2)', () => {
   let augusto: Teacher;
 
   beforeEach(async () => {
-    fx.tgCalls.length = 0;
-    fx.emailCalls.length = 0;
     f = await makeFixture();
     augusto = await loadAugusto(f.client);
   });
@@ -248,12 +215,25 @@ describe('G_C-14 — transition email matrix (AC-3.4.2)', () => {
   });
 
   describe('dispatchTransition — end-to-end against real libsql + mocked clients', () => {
+    let emailSender: EmailSenderStub;
+    let telegram: TelegramBotStub;
+
+    beforeEach(() => {
+      emailSender = buildEmailSenderStub();
+      telegram = buildTelegramStub();
+    });
+
     test.each(ALLOWED.filter((c) => c.expectsEmail))(
       '$from → $to fires email with subject "$subjectExact" + event_kind "$eventKind"',
       async ({ from, to, eventKind, subjectExact }) => {
         const session = await insertSession(f.db, augusto, `sess-${from}-${to}`, to);
-        const result = await dispatchTransition({
-          db: f.db,
+        const dispatch = createDispatchTransition({
+          emailSender,
+          telegram,
+          notifyLog: makeNotifyLogRepository(f.db),
+          maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+        });
+        const result = await dispatch({
           session,
           previousStatus: from,
           assignedMaestro: augusto,
@@ -262,10 +242,10 @@ describe('G_C-14 — transition email matrix (AC-3.4.2)', () => {
         expect(result.dispatched).toBe(true);
         expect(result.outcomes).toHaveLength(1);
         expect(result.failures).toHaveLength(0);
-        expect(fx.emailCalls).toHaveLength(1);
-        expect(fx.tgCalls).toHaveLength(0); // success path: no warning
+        expect(emailSender.calls).toHaveLength(1);
+        expect(telegram.calls).toHaveLength(0); // success path: no warning
 
-        const email = fx.emailCalls[0];
+        const email = emailSender.calls[0];
         expect(email?.to).toBe('transicion@example.com');
         expect(email?.subject).toBe(subjectExact);
         expect(email?.eventKind).toBe(eventKind);
@@ -279,8 +259,13 @@ describe('G_C-14 — transition email matrix (AC-3.4.2)', () => {
       '$from → $to fires NO email (no-op)',
       async ({ from, to }) => {
         const session = await insertSession(f.db, augusto, `sess-noemail-${from}-${to}`, to);
-        const result = await dispatchTransition({
-          db: f.db,
+        const dispatch = createDispatchTransition({
+          emailSender,
+          telegram,
+          notifyLog: makeNotifyLogRepository(f.db),
+          maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+        });
+        const result = await dispatch({
           session,
           previousStatus: from,
           assignedMaestro: augusto,
@@ -289,8 +274,8 @@ describe('G_C-14 — transition email matrix (AC-3.4.2)', () => {
         expect(result.dispatched).toBe(false);
         expect(result.outcomes).toHaveLength(0);
         expect(result.failures).toHaveLength(0);
-        expect(fx.emailCalls).toHaveLength(0);
-        expect(fx.tgCalls).toHaveLength(0);
+        expect(emailSender.calls).toHaveLength(0);
+        expect(telegram.calls).toHaveLength(0);
       },
     );
 
@@ -298,23 +283,33 @@ describe('G_C-14 — transition email matrix (AC-3.4.2)', () => {
       'illegal $from → $to: dispatcher returns no-op (defense-in-depth)',
       async ({ from, to }) => {
         const session = await insertSession(f.db, augusto, `sess-illegal-${from}-${to}`, to);
-        const result = await dispatchTransition({
-          db: f.db,
+        const dispatch = createDispatchTransition({
+          emailSender,
+          telegram,
+          notifyLog: makeNotifyLogRepository(f.db),
+          maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+        });
+        const result = await dispatch({
           session,
           previousStatus: from,
           assignedMaestro: augusto,
         });
 
         expect(result.dispatched).toBe(false);
-        expect(fx.emailCalls).toHaveLength(0);
+        expect(emailSender.calls).toHaveLength(0);
       },
     );
 
     test('notify_log stays empty on the all-success matrix sweep', async () => {
+      const dispatch = createDispatchTransition({
+        emailSender,
+        telegram,
+        notifyLog: makeNotifyLogRepository(f.db),
+        maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+      });
       for (const [i, c] of ALLOWED.filter((c) => c.expectsEmail).entries()) {
         const session = await insertSession(f.db, augusto, `sess-sweep-${i}`, c.to);
-        await dispatchTransition({
-          db: f.db,
+        await dispatch({
           session,
           previousStatus: c.from,
           assignedMaestro: augusto,
@@ -326,14 +321,19 @@ describe('G_C-14 — transition email matrix (AC-3.4.2)', () => {
 
     test('attempt parameter flows to sendEmail call', async () => {
       const session = await insertSession(f.db, augusto, 'sess-attempt-3', 'confirmed');
-      await dispatchTransition({
-        db: f.db,
+      const dispatch = createDispatchTransition({
+        emailSender,
+        telegram,
+        notifyLog: makeNotifyLogRepository(f.db),
+        maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+      });
+      await dispatch({
         session,
         previousStatus: 'pending',
         assignedMaestro: augusto,
         attempt: 3,
       });
-      expect(fx.emailCalls[0]?.attempt).toBe(3);
+      expect(emailSender.calls[0]?.attempt).toBe(3);
     });
   });
 });

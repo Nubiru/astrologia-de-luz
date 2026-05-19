@@ -27,7 +27,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { CONTENT_PANEL } from '@/lib/content/panel';
+import { CONTENT_PANEL } from '@/infrastructure/content/panel';
 
 // A well-formed placeholder is `{` + at-least-one camelCase identifier char +
 // `}`. The body of these tests builds a set of placeholders from every slot
@@ -236,7 +236,7 @@ describe('CONTENT_PANEL barrel — surface integration', () => {
     // through the scaffold sentinel. This pairing adds a direct check that
     // the CONTENT_PANEL named export round-trips through the barrel surface
     // a consumer would actually use.
-    const barrel = await import('@/lib/content');
+    const barrel = await import('@/infrastructure/content');
     expect(barrel).toHaveProperty('CONTENT_PANEL');
     expect((barrel as { CONTENT_PANEL: unknown }).CONTENT_PANEL).toBe(CONTENT_PANEL);
   });

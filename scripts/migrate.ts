@@ -5,11 +5,13 @@
  * deploys apply pending migrations once per release (atomic build-or-rollback
  * gives recovery on partial failure — R-8). The seed migration
  * `0003_seed_augusto.sql` ships a `$$ADMIN_EMAIL$$` placeholder;
- * `runMigrations` stages `db/migrations/` to tmp, substitutes the brand-owner
- * email (SQL-quote-escaped), then hands the staging dir to drizzle's libsql
- * migrator. Exported so the pairing test can drive it against an in-memory
- * libsql without going through `@/db/client` (which validates env lazily on
- * first getDb() / getClient() call per G_C-25).
+ * `runMigrations` stages `src/infrastructure/db/migrations/` to tmp,
+ * substitutes the brand-owner email (SQL-quote-escaped), then hands the
+ * staging dir to drizzle's libsql migrator. Exported so the pairing test
+ * can drive it against an in-memory libsql without going through
+ * `@/db/client` (which validates env lazily on first getDb() / getClient()
+ * call per G_C-25). G_C-27 W4-2: default migrationsFolder updated to the
+ * new src/infrastructure path.
  */
 
 import { cpSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -23,7 +25,7 @@ import { migrate } from 'drizzle-orm/libsql/migrator';
 export async function runMigrations<TSchema extends Record<string, unknown>>(
   db: LibSQLDatabase<TSchema>,
   adminEmail: string,
-  migrationsFolder = 'db/migrations',
+  migrationsFolder = 'src/infrastructure/db/migrations',
 ): Promise<void> {
   const staging = mkdtempSync(join(tmpdir(), 'drizzle-migrations-'));
   cpSync(migrationsFolder, staging, { recursive: true });
@@ -37,7 +39,7 @@ export async function runMigrations<TSchema extends Record<string, unknown>>(
 
 const isCli = fileURLToPath(import.meta.url) === resolve(process.argv[1] ?? '');
 if (isCli) {
-  Promise.all([import('@/db/client'), import('@/lib/env')])
+  Promise.all([import('@/infrastructure/db/client'), import('@/infrastructure/env')])
     .then(async ([{ getClient, getDb }, { getEnv }]) => {
       const adminEmails = getEnv().ADMIN_EMAILS;
       const firstAdmin = adminEmails.split(',')[0] ?? adminEmails;

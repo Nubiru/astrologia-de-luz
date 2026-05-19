@@ -19,6 +19,18 @@
  *   4. Warning Telegram ITSELF fails → 2 notify_log rows (visitor email
  *      + warning telegram). Proves the warning is logged as a normal
  *      outcome, not silently dropped.
+ *   5. confirmed → completed: no-email transition; pre-staged failure
+ *      stub is never consumed; zero outcomes, zero log writes.
+ *
+ * G_C-43 refactor (M-20 / D-056, pilot 6/N): G_C-42's 4-port Path A
+ * playbook applied verbatim; only deltas are the
+ * `createDispatchPending → createDispatchTransition` factory swap and
+ * the `previousStatus` input-shape extension. The stub builders +
+ * per-port failure-injection setters are copied byte-identical from
+ * tests/integration/notify-failure-logs.test.ts (post-G_C-42 reference).
+ * Extension stays IN-FILE per Lesson 2 scope discipline — shared-helper
+ * extraction to tests/_helpers/dispatcher-stubs.ts is deferred until
+ * all concern-C/D files migrate.
  *
  * What this catches:
  *   - The shared helper drift in `maybeFireVisitorFailureWarning` — e.g.,
@@ -38,77 +50,33 @@ import { join, resolve } from 'node:path';
 
 import { type Client, createClient } from '@libsql/client';
 import { type LibSQLDatabase, drizzle } from 'drizzle-orm/libsql';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 
-const fx = vi.hoisted(() => ({
-  tgCalls: [] as Array<{ chatId: string; text: string; parseMode?: string }>,
-  emailCalls: [] as Array<{
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
-    sessionId: string;
-    eventKind: string;
-    attempt: number;
-  }>,
-  tgRespByChatId: new Map<string, unknown>(),
-  emailRespByEventKind: new Map<string, unknown>(),
-}));
-
-vi.mock('@/lib/env', () => ({
-  getEnv: () => ({
-    ADMIN_EMAILS: 'augusto@astrologiadeluz.com',
-    TELEGRAM_BOT_TOKEN: '0000:test-token',
-    AUTH_RESEND_KEY: 're_test',
-    RESEND_FROM: 'no-reply@astrologiadeluz.com',
-  }),
-}));
-
-vi.mock('@/lib/telegram', () => ({
-  sendMessage: vi.fn(async (input: { chatId: string; text: string; parseMode?: string }) => {
-    fx.tgCalls.push(input);
-    const stub = fx.tgRespByChatId.get(input.chatId);
-    if (stub) return stub;
-    return { ok: true as const, result: { message_id: fx.tgCalls.length, chat: { id: 1 } } };
-  }),
-}));
-
-vi.mock('@/lib/resend', () => ({
-  sendEmail: vi.fn(
-    async (input: {
-      to: string;
-      subject: string;
-      html: string;
-      text: string;
-      sessionId: string;
-      eventKind: string;
-      attempt: number;
-    }) => {
-      fx.emailCalls.push(input);
-      const stub = fx.emailRespByEventKind.get(input.eventKind);
-      if (stub) return stub;
-      return { data: { id: `mock-${fx.emailCalls.length}` }, error: null };
-    },
-  ),
-  idempotencyKey: vi.fn(
-    (input: { sessionId: string; eventKind: string; attempt: number }) =>
-      `mock-${input.sessionId}:${input.eventKind}:${input.attempt}`,
-  ),
-}));
-
-import { type Session, type Teacher, notifyLog, sessions } from '@/db/schema';
-import { type SessionStatus, dispatchTransition } from '@/lib/notify/dispatch-transition';
+import {
+  type SessionStatus,
+  createDispatchTransition,
+} from '@/application/notify/dispatch-transition';
+import { makeNotifyLogRepository } from '@/infrastructure/db/repositories/notify-log.repository';
+import { type Session, type Teacher, notifyLog, sessions } from '@/infrastructure/db/schema';
+import * as schema from '@/infrastructure/db/schema';
 import { runMigrations } from '../../scripts/migrate';
+import {
+  type EmailSenderStub,
+  type TelegramBotStub,
+  buildEmailSenderStub,
+  buildMaestrosReaderStub,
+  buildTelegramStub,
+} from '../_helpers/dispatcher-stubs';
 
 const ROOT = resolve(__dirname, '..', '..');
-const MIGRATIONS = resolve(ROOT, 'db/migrations');
+const MIGRATIONS = resolve(ROOT, 'src/infrastructure/db/migrations');
 const REF_NOW = 1_779_789_600_000;
 const AUGUSTO_CHAT_ID = '111222333';
 
 type Fixture = {
   workdir: string;
   client: Client;
-  db: LibSQLDatabase<Record<string, never>>;
+  db: LibSQLDatabase<typeof schema>;
 };
 
 async function makeFixture(opts: { brandOwnerChatId: string | null }): Promise<Fixture> {
@@ -116,7 +84,7 @@ async function makeFixture(opts: { brandOwnerChatId: string | null }): Promise<F
   const dbPath = join(workdir, 'test.db');
   closeSync(openSync(dbPath, 'w'));
   const client = createClient({ url: `file:${dbPath}` });
-  const db = drizzle(client) as LibSQLDatabase<Record<string, never>>;
+  const db = drizzle(client, { schema });
   await runMigrations(db, 'augusto@astrologiadeluz.com', MIGRATIONS);
   if (opts.brandOwnerChatId !== null) {
     await client.execute(
@@ -147,7 +115,7 @@ async function loadAugusto(client: Client): Promise<Teacher> {
 }
 
 async function insertSession(
-  db: LibSQLDatabase<Record<string, never>>,
+  db: LibSQLDatabase<typeof schema>,
   augusto: Teacher,
   id: string,
   status: SessionStatus,
@@ -176,11 +144,12 @@ async function insertSession(
 }
 
 describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () => {
+  let emailSender: EmailSenderStub;
+  let telegram: TelegramBotStub;
+
   beforeEach(() => {
-    fx.tgCalls.length = 0;
-    fx.emailCalls.length = 0;
-    fx.tgRespByChatId.clear();
-    fx.emailRespByEventKind.clear();
+    emailSender = buildEmailSenderStub();
+    telegram = buildTelegramStub();
   });
 
   test('Resend 502 on pending→confirmed → notify_log row + warning Telegram fires', async () => {
@@ -189,13 +158,20 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
       const augusto = await loadAugusto(f.client);
       const session = await insertSession(f.db, augusto, 'sess-fail-confirm', 'confirmed');
 
-      fx.emailRespByEventKind.set('visitor_confirm', {
-        data: null,
-        error: { statusCode: 502, message: 'Resend upstream 502 (mocked)' },
+      emailSender.setResultByEventKind('visitor_confirm', {
+        ok: false,
+        status: 502,
+        errorBody: 'Resend upstream 502 (mocked)',
       });
 
-      const result = await dispatchTransition({
-        db: f.db,
+      const dispatch = createDispatchTransition({
+        emailSender,
+        telegram,
+        notifyLog: makeNotifyLogRepository(f.db),
+        maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+      });
+
+      const result = await dispatch({
         session,
         previousStatus: 'pending',
         assignedMaestro: augusto,
@@ -208,12 +184,12 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
       expect(result.failures[0]?.status).toBe(502);
 
       // The warning Telegram fires to brand-owner with verbatim text + tokens.
-      expect(fx.tgCalls).toHaveLength(1);
-      expect(fx.tgCalls[0]?.chatId).toBe(AUGUSTO_CHAT_ID);
-      expect(fx.tgCalls[0]?.text).toContain('falla.t@example.com');
-      expect(fx.tgCalls[0]?.text).toContain('502');
-      expect(fx.tgCalls[0]?.text).toContain(session.id);
-      expect(fx.tgCalls[0]?.text).toContain('contactá manualmente');
+      expect(telegram.calls).toHaveLength(1);
+      expect(telegram.calls[0]?.chatId).toBe(AUGUSTO_CHAT_ID);
+      expect(telegram.calls[0]?.text).toContain('falla.t@example.com');
+      expect(telegram.calls[0]?.text).toContain('502');
+      expect(telegram.calls[0]?.text).toContain(session.id);
+      expect(telegram.calls[0]?.text).toContain('contactá manualmente');
 
       const rows = await f.db.select().from(notifyLog);
       expect(rows).toHaveLength(1);
@@ -232,13 +208,20 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
       const augusto = await loadAugusto(f.client);
       const session = await insertSession(f.db, augusto, 'sess-fail-decline', 'rejected');
 
-      fx.emailRespByEventKind.set('visitor_decline', {
-        data: null,
-        error: { statusCode: 500, message: 'Resend 500 boom' },
+      emailSender.setResultByEventKind('visitor_decline', {
+        ok: false,
+        status: 500,
+        errorBody: 'Resend 500 boom',
       });
 
-      const result = await dispatchTransition({
-        db: f.db,
+      const dispatch = createDispatchTransition({
+        emailSender,
+        telegram,
+        notifyLog: makeNotifyLogRepository(f.db),
+        maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+      });
+
+      const result = await dispatch({
         session,
         previousStatus: 'pending',
         assignedMaestro: augusto,
@@ -246,8 +229,8 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
 
       expect(result.failures).toHaveLength(1);
       expect(result.failures[0]?.eventKind).toBe('visitor_decline');
-      expect(fx.tgCalls).toHaveLength(1);
-      expect(fx.tgCalls[0]?.text).toContain('500');
+      expect(telegram.calls).toHaveLength(1);
+      expect(telegram.calls[0]?.text).toContain('500');
 
       const rows = await f.db.select().from(notifyLog);
       expect(rows[0]?.eventKind).toBe('visitor_decline');
@@ -263,13 +246,20 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
       const augusto = await loadAugusto(f.client);
       const session = await insertSession(f.db, augusto, 'sess-fail-no-tg', 'cancelled');
 
-      fx.emailRespByEventKind.set('visitor_cancel', {
-        data: null,
-        error: { statusCode: 503, message: 'Resend 503' },
+      emailSender.setResultByEventKind('visitor_cancel', {
+        ok: false,
+        status: 503,
+        errorBody: 'Resend 503',
       });
 
-      const result = await dispatchTransition({
-        db: f.db,
+      const dispatch = createDispatchTransition({
+        emailSender,
+        telegram,
+        notifyLog: makeNotifyLogRepository(f.db),
+        maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+      });
+
+      const result = await dispatch({
         session,
         previousStatus: 'confirmed',
         assignedMaestro: augusto,
@@ -277,7 +267,7 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
 
       expect(result.outcomes).toHaveLength(1); // only the visitor email outcome (no warning)
       expect(result.failures).toHaveLength(1);
-      expect(fx.tgCalls).toHaveLength(0);
+      expect(telegram.calls).toHaveLength(0);
 
       const rows = await f.db.select().from(notifyLog);
       expect(rows).toHaveLength(1);
@@ -294,18 +284,25 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
       const augusto = await loadAugusto(f.client);
       const session = await insertSession(f.db, augusto, 'sess-fail-double', 'confirmed');
 
-      fx.emailRespByEventKind.set('visitor_confirm', {
-        data: null,
-        error: { statusCode: 502, message: 'Resend 502' },
-      });
-      fx.tgRespByChatId.set(AUGUSTO_CHAT_ID, {
+      emailSender.setResultByEventKind('visitor_confirm', {
         ok: false,
-        error_code: 502,
-        description: 'Telegram api 502',
+        status: 502,
+        errorBody: 'Resend 502',
+      });
+      telegram.setResultByChatId(AUGUSTO_CHAT_ID, {
+        ok: false,
+        status: 502,
+        errorBody: 'Telegram api 502',
       });
 
-      const result = await dispatchTransition({
-        db: f.db,
+      const dispatch = createDispatchTransition({
+        emailSender,
+        telegram,
+        notifyLog: makeNotifyLogRepository(f.db),
+        maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+      });
+
+      const result = await dispatch({
         session,
         previousStatus: 'pending',
         assignedMaestro: augusto,
@@ -332,21 +329,28 @@ describe('G_C-14 — visitor-email-failure → AC-3.3.3 warning Telegram', () =>
 
       // Pre-stage a failure stub that would fire IF the dispatcher attempted
       // a send — proves the no-email branch genuinely doesn't reach Resend.
-      fx.emailRespByEventKind.set('visitor_confirm', {
-        data: null,
-        error: { statusCode: 500, message: 'should never see this' },
+      emailSender.setResultByEventKind('visitor_confirm', {
+        ok: false,
+        status: 500,
+        errorBody: 'should never see this',
       });
 
-      const result = await dispatchTransition({
-        db: f.db,
+      const dispatch = createDispatchTransition({
+        emailSender,
+        telegram,
+        notifyLog: makeNotifyLogRepository(f.db),
+        maestrosReader: buildMaestrosReaderStub({ brandOwner: augusto }),
+      });
+
+      const result = await dispatch({
         session,
         previousStatus: 'confirmed',
         assignedMaestro: augusto,
       });
 
       expect(result.dispatched).toBe(false);
-      expect(fx.emailCalls).toHaveLength(0);
-      expect(fx.tgCalls).toHaveLength(0);
+      expect(emailSender.calls).toHaveLength(0);
+      expect(telegram.calls).toHaveLength(0);
       const rows = await f.db.select().from(notifyLog);
       expect(rows).toHaveLength(0);
     } finally {

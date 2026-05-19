@@ -35,7 +35,7 @@
 
 import { expect, test } from '@playwright/test';
 
-import { CONTENT_PANEL } from '@/lib/content';
+import { CONTENT_PANEL } from '@/infrastructure/content';
 
 test.describe('AC-1.3.1 — GET /panel renders the magic-link sign-in form', () => {
   test('the root <html lang="es"> + form skeleton are present', async ({ page }) => {
